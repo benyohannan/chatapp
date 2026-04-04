@@ -1,0 +1,5 @@
+{
+  "java.project.referencedLibraries": [
+    "E:/tomcat/apache-tomcat-10.1.53/webapps/chatapp/WEB-INF/lib/*.jar"
+  ]
+}

@@ -97,3 +97,35 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Function to toggle between light and dark modes
+    function toggleTheme() {
+        const body = document.body;
+        const themeIcon = document.getElementById('theme-icon');
+
+        // Toggle the class on the body
+        if (body.classList.contains('light-mode')) {
+            body.classList.remove('light-mode');
+            body.classList.add('dark-mode');
+            themeIcon.classList.remove('fa-moon');
+            themeIcon.classList.add('fa-sun');
+        } else {
+            body.classList.remove('dark-mode');
+            body.classList.add('light-mode');
+            themeIcon.classList.remove('fa-sun');
+            themeIcon.classList.add('fa-moon');
+        }
+    }
+
+    // Theme toggle logic
+    const themeToggle = document.getElementById('themeToggle');
+    const body = document.body;
+
+    themeToggle.addEventListener('click', toggleTheme);
+
+    // Add the theme toggle icon
+    const themeIcon = document.getElementById('theme-icon');
+    themeIcon.classList.add('fa-moon');
+    themeIcon.style.cursor = 'pointer';
+</script>
