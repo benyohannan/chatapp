@@ -3408,42 +3408,52 @@ function handleChatClick(element) {
 }
 
 // Open chat function
-// Handle chat item click to toggle between chat list and messages on mobile
-function openChat(userName) {
-    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    // Update chat details
-    chatNameElement.innerText = userName;
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hey! How are you doing today? 😊</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-    `;
-
-    if (isMobile) {
-        // Hide sidebar and show main chat on mobile
-        sidebarElement.classList.add('d-none');
-        mainChatElement.classList.add('active');
-    }
-}
-
-// Handle back button click to return to chat list on mobile
-function goBackToChatList() {
-    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    if (isMobile) {
-        // Show sidebar and hide main chat on mobile
-        sidebarElement.classList.remove('d-none');
-        mainChatElement.classList.remove('active');
+function openChat(name, avatar, status, gradient = '#ff6b6b, #feca57') {
+    try {
+        welcomeScreen.style.display = 'none';
+        chatInterface.style.display = 'flex';
+        
+        chatName.textContent = name;
+        chatStatus.textContent = status;
+        chatAvatar.textContent = avatar;
+        chatAvatar.style.background = `linear-gradient(45deg, ${gradient})`;
+        
+        currentChatInfo = currentChatData.profiles[name] || {
+            type: 'contact',
+            name: name,
+            avatar: avatar,
+            avatarGradient: `linear-gradient(45deg, ${gradient})`,
+            status: status,
+            isOnline: status === 'Online'
+        };
+        
+        loadChatMessages(name);
+        closeChatSearch();
+        closeReplyBar();
+        chatDropdownMenu.classList.remove('show');
+        
+        if (isMobileDevice()) {
+            setTimeout(() => {
+                sidebar.classList.add('hide');
+                mainChat.classList.add('show');
+            }, 50);
+        }
+        
+        document.querySelectorAll('.chat-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        const clickedItem = document.querySelector(`[data-name="${name}"]`);
+        if (clickedItem) {
+            clickedItem.classList.add('active');
+        }
+        
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error opening chat:', error);
     }
 }
 

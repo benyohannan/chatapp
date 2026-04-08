@@ -29,6 +29,10 @@ public class LoginServlet extends HttpServlet {
             User user = connection.findUserByUsername(username);
 
             if (user != null && user.getPassword().equals(password)) {
+                request.getSession().setAttribute("username", user.getUsername());
+                request.getSession().setAttribute("firstName", user.getFirstName());
+                 request.getSession().setAttribute("lastName", user.getLastName());
+
                 response.sendRedirect("frontend/basic.jsp");
             } else {
                 response.sendRedirect("auth.jsp?error=invalid_credentials");
