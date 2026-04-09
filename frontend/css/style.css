@@ -35,7 +35,7 @@ html, body{
   --hover-bg: #202c33;
   --shadow: rgba(0, 0, 0, 0.2);
   --danger-color: #dc267f;
-  --active-chat: #2a3942;
+  --active-chat: white;
 }
 
 .light-mode {
@@ -426,6 +426,11 @@ body {
   background: var(--active-chat);
 }
 
+.chat-item.active .chat-name,
+.chat-item.active .chat-preview {
+  color: #111b21;
+}
+
 .chat-avatar {
   width: 50px;
   height: 50px;
@@ -471,10 +476,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  color: var(--text-primary);
 }
 
+
 .last-message {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
@@ -3525,7 +3532,317 @@ input:checked + .toggle-slider:before {
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+}
+
+/* Group Chat Modal Styles */
+.group-chat-modal {
+  width: 70%;
+  max-width: 1320px;
+  height: 90vh;
+  background: var(--primary-bg);
+  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+.group-chat-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: var(--secondary-bg);
+  border: none;
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 50%;
+  z-index: 1001;
+}
+
+.group-chat-close:hover {
+  background: var(--hover-bg);
+}
+
+.group-room-shell {
+  width: 100%;
+  height: 100%;
+  background: var(--primary-bg);
+  display: flex;
+  padding: 0;
+}
+
+.group-room-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  gap: 18px;
+  padding: 18px;
+}
+
+.group-room-sidebar,
+.group-room-members {
+  background: var(--secondary-bg);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.group-room-sidebar {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.room-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.room-brand-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--green-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.room-brand-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.room-brand-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.room-list-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-channel {
+  border: none;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  font-size: 14px;
+  display: block;
+  width: 100%;
+}
+
+.room-channel:hover,
+.room-channel.active {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.group-room-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--chat-bg);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  background: var(--secondary-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.room-name {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.room-meta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.room-back {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border 0.2s ease, color 0.2s ease;
+}
+
+.room-back:hover {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.room-messages {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--chat-bg);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 75%;
+}
+
+.message-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.message-bubble {
+  padding: 14px 18px;
+  border-radius: 18px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.received .message-bubble {
+  background: var(--tertiary-bg);
+  color: var(--text-primary);
+}
+
+.sent {
+  align-items: flex-end;
+}
+
+.sent .message-bubble {
+  background: var(--green-primary);
+  color: white;
+}
+
+.room-input-bar {
+  padding: 16px 24px;
+  background: var(--secondary-bg);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--border-color);
+}
+
+.room-input-bar input {
+  flex: 1;
+  background: var(--chat-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 12px 18px;
+  color: var(--text-primary);
+}
+
+.room-input-bar button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green-primary);
+  color: white;
+  cursor: pointer;
+}
+
+.group-room-members {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.members-title {
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--chat-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.member-status {
+  font-size: 12px;
+}
+
+.member-status.online {
+  color: #48db71;
+}
+
+.member-status.away {
+  color: #ffd166;
+}
+
+.member-status.offline {
+  color: #9ca3af;
+}
+
+/* Mobile responsiveness for group chat modal */
+@media (max-width: 768px) {
+  .group-chat-modal {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .group-room-panel {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .group-room-sidebar,
+  .group-room-members {
+    display: none;
+  }
+
+  .group-room-main {
+    border-radius: 0;
+  }
+
+  .room-input-bar {
+    padding: 12px 16px;
+  }
 }
 
 #remoteVideo {
@@ -4054,4 +4371,48 @@ input:checked + .toggle-slider:before {
 .action-btn:hover {
   background: var(--hover-bg);
   color: var(--green-primary);
+}
+
+/* Group Chat Modal Styles */
+
+
+
+
+
+
+
+
+
+.members-title {
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--chat-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.member-status {
+  font-size: 12px;
+}
+
+.member-status.online {
+  color: #48db71;
+}
+
+.member-status.away {
+  color: #ffd166;
+}
+
+.member-status.offline {
+  color: #9ca3af;
 }
