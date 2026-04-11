@@ -6,8 +6,6 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 import backend.models.User;
-import java.util.Optional;
-import io.github.cdimascio.dotenv.Dotenv;
 
 public class MongoConnection {
 
@@ -17,10 +15,7 @@ public class MongoConnection {
 
         if (database == null) {
 
-            // Load environment variables from .env file
-            Dotenv dotenv = Dotenv.configure().directory("e:/tomcat/apache-tomcat-10.1.53/webapps/chatapp").load();
-            String uri = Optional.ofNullable(dotenv.get("MONGO_URI"))
-                    .orElseThrow(() -> new IllegalStateException("Environment variable MONGO_URI is not set in .env file"));
+            String uri = "mongodb+srv://chatuser:chat123@cluster0.suv4mw3.mongodb.net/chatapp";
 
             MongoClient client = MongoClients.create(uri);
             database = client.getDatabase("chatapp");
@@ -44,23 +39,6 @@ public class MongoConnection {
     public User findUserByUsername(String username) {
         MongoCollection<Document> users = getDatabase().getCollection("users");
         Document query = new Document("username", username);
-        Document result = users.find(query).first();
-
-        if (result != null) {
-            return new User(
-                    result.getString("firstName"),
-                    result.getString("lastName"),
-                    result.getString("username"),
-                    result.getString("email"),
-                    result.getString("password")
-            );
-        }
-        return null;
-    }
-
-    public User findUserByEmail(String email) {
-        MongoCollection<Document> users = getDatabase().getCollection("users");
-        Document query = new Document("email", email);
         Document result = users.find(query).first();
 
         if (result != null) {

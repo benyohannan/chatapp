@@ -11,5 +11,6 @@
        
     </div>
     <%@ include file="includes/modals.jsp" %>
+    <%@ include file="includes/groupchat.jsp" %>
 </body>
 </html>

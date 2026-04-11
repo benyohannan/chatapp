@@ -12,9 +12,7 @@
                     Select one of the chats to start messaging.
                 </p>
             </div>
-<input type="hidden" id="firstName" value="<%= session.getAttribute("firstName") %>">
-<input type="hidden" id="lastName" value="<%= session.getAttribute("lastName") %>">
-<input type="hidden" id="username" value="<%= session.getAttribute("username") %>">
+
             <!-- Chat Interface (hidden by default) -->
             <div class="chat-interface" id="chatInterface" style="display: none; flex-direction: column; height: 100%;">
                 <!-- Chat Header -->
@@ -245,19 +243,4 @@ document.getElementById("backBtn").addEventListener("click", () => {
         window.openChat = openChat;
         window.showSidebar = showSidebar;
     });
-    document.addEventListener("DOMContentLoaded", () => {
-
-    const firstName = document.getElementById("firstName").value;
-    const lastName = document.getElementById("lastName").value;
-    const username = document.getElementById("username").value;
-
-    if (firstName && lastName) {
-        document.getElementById("chatName").innerText =
-            firstName + " " + lastName;
-
-        document.getElementById("chatAvatar").innerText =
-            firstName.charAt(0) + lastName.charAt(0);
-    }
-
-});
 </script>

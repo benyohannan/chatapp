@@ -27,23 +27,6 @@ public class RegisterServlet extends HttpServlet {
             return;
         }
 
-        // Check if username or email already exists
-        try {
-            MongoConnection connection = new MongoConnection();
-            if (connection.findUserByUsername(username) != null) {
-                response.sendError(HttpServletResponse.SC_CONFLICT, "Username already exists.");
-                return;
-            }
-            if (connection.findUserByEmail(email) != null) {
-                response.sendError(HttpServletResponse.SC_CONFLICT, "Email already exists.");
-                return;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Error checking user existence.");
-            return;
-        }
-
         // Create user object
         User user = new User(firstName, lastName, username, email, password);
 

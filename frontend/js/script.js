@@ -70,7 +70,7 @@ const editProfileSaveBtn = document.getElementById('editProfileSaveBtn');
 const editProfileContent = document.getElementById('editProfileContent');
 
 // Status Elements
-const StatusBtnOpen = document.getElementById('Status');
+const StatusBtnOpen = document.getElementById('statusBtnOpen');
 const statusModal = document.getElementById('statusModal');
 const statusBackBtn = document.getElementById('statusBackBtn');
 const statusCloseBtn = document.getElementById('statusCloseBtn');
@@ -1092,15 +1092,15 @@ function formatCallTime(timestamp) {
 // Theme management
 function toggleTheme() {
     const body = document.body;
-    const themeIcon = themeToggle.querySelector('i');
+    const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
     if (currentTheme === 'light') {
         body.classList.remove('light-mode');
-        themeIcon.className = 'fas fa-moon';
+        if (themeIcon) themeIcon.className = 'fas fa-moon';
         currentTheme = 'dark';
         localStorage.setItem('RainChatify-theme', 'dark');
     } else {
         body.classList.add('light-mode');
-        themeIcon.className = 'fas fa-sun';
+        if (themeIcon) themeIcon.className = 'fas fa-sun';
         currentTheme = 'light';
         localStorage.setItem('RainChatify-theme', 'light');
     }
@@ -1110,15 +1110,15 @@ function toggleTheme() {
 function loadTheme() {
     const savedTheme = localStorage.getItem('RainChatify-theme');
     const body = document.body;
-    const themeIcon = themeToggle.querySelector('i');
+    const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
 
     if (savedTheme === 'light') {
         body.classList.add('light-mode');
-        themeIcon.className = 'fas fa-sun';
+        if (themeIcon) themeIcon.className = 'fas fa-sun';
         currentTheme = 'light';
     } else {
         body.classList.remove('light-mode');
-        themeIcon.className = 'fas fa-moon';
+        if (themeIcon) themeIcon.className = 'fas fa-moon';
         currentTheme = 'dark';
     }
 }
@@ -1515,19 +1515,22 @@ function resetAddStatusForm() {
 
 // Handle status type selection
 function handleStatusTypeSelection() {
-    document.querySelectorAll('.status-type-btn').forEach(btn => {
+    const statusTypeButtons = document.querySelectorAll('.status-type-btn');
+    if (!statusTypeButtons.length) return;
+
+    statusTypeButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.status-type-btn').forEach(b => b.classList.remove('active'));
+            statusTypeButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
             selectedStatusType = btn.dataset.type;
             
             if (selectedStatusType === 'text') {
-                textStatusInput.style.display = 'block';
-                mediaStatusInput.style.display = 'none';
+                if (textStatusInput) textStatusInput.style.display = 'block';
+                if (mediaStatusInput) mediaStatusInput.style.display = 'none';
             } else {
-                textStatusInput.style.display = 'none';
-                mediaStatusInput.style.display = 'block';
+                if (textStatusInput) textStatusInput.style.display = 'none';
+                if (mediaStatusInput) mediaStatusInput.style.display = 'block';
             }
         });
     });
@@ -1535,9 +1538,12 @@ function handleStatusTypeSelection() {
 
 // Handle background selection
 function handleBackgroundSelection() {
-    document.querySelectorAll('.bg-option').forEach(option => {
+    const bgOptions = document.querySelectorAll('.bg-option');
+    if (!bgOptions.length) return;
+
+    bgOptions.forEach(option => {
         option.addEventListener('click', () => {
-            document.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
+            bgOptions.forEach(opt => opt.classList.remove('active'));
             option.classList.add('active');
             selectedBackground = option.dataset.bg;
         });
@@ -1547,6 +1553,8 @@ function handleBackgroundSelection() {
 // Handle media selection
 function handleMediaSelection() {
     const selectMediaBtn = document.querySelector('.select-media-btn');
+    if (!selectMediaBtn || !statusMediaInput || !removeMediaBtn) return;
+
     selectMediaBtn.addEventListener('click', () => {
         statusMediaInput.click();
     });
@@ -1561,7 +1569,7 @@ function handleMediaSelection() {
     
     removeMediaBtn.addEventListener('click', () => {
         selectedMediaFile = null;
-        mediaPreview.style.display = 'none';
+        if (mediaPreview) mediaPreview.style.display = 'none';
         statusMediaInput.value = '';
     });
 }
@@ -2838,24 +2846,24 @@ function endCall() {
 
 // MESSAGING FUNCTIONS
 
+// Initialize helper for optional listeners
+function addListenerIfExists(element, type, handler, options) {
+    if (element) {
+        element.addEventListener(type, handler, options);
+    }
+}
+
 // Initialize event listeners
 function initializeEventListeners() {
     // Theme toggle
-    themeToggle.addEventListener('click', toggleTheme);
+    addListenerIfExists(themeToggle, 'click', toggleTheme);
 
     // Status icon click in sidebar
-    // const statusIcon = document.querySelector('.fa-circle-notch');
-    if (StatusBtnOpen) {
-        StatusBtnOpen.addEventListener('click', showStatusModal);
-    }
+    addListenerIfExists(StatusBtnOpen, 'click', showStatusModal);
 
     // Status modal close buttons
-    if (statusBackBtn) {
-        statusBackBtn.addEventListener('click', hideStatusModal);
-    }
-    if (statusCloseBtn) {
-        statusCloseBtn.addEventListener('click', hideStatusModal);
-    }
+    addListenerIfExists(statusBackBtn, 'click', hideStatusModal);
+    addListenerIfExists(statusCloseBtn, 'click', hideStatusModal);
     if (statusModal) {
         statusModal.addEventListener('click', function(e) {
             if (e.target === statusModal) {
@@ -2865,18 +2873,10 @@ function initializeEventListeners() {
     }
 
     // Status viewer close and navigation
-    if (statusViewerClose) {
-        statusViewerClose.addEventListener('click', hideStatusViewer);
-    }
-    if (prevStatusBtn) {
-        prevStatusBtn.addEventListener('click', () => navigateStatus('prev'));
-    }
-    if (nextStatusBtn) {
-        nextStatusBtn.addEventListener('click', () => navigateStatus('next'));
-    }
-    if (statusReplyBtn) {
-        statusReplyBtn.addEventListener('click', replyToStatus);
-    }
+    addListenerIfExists(statusViewerClose, 'click', hideStatusViewer);
+    addListenerIfExists(prevStatusBtn, 'click', () => navigateStatus('prev'));
+    addListenerIfExists(nextStatusBtn, 'click', () => navigateStatus('next'));
+    addListenerIfExists(statusReplyBtn, 'click', replyToStatus);
     if (statusReplyInput) {
         statusReplyInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -2893,12 +2893,8 @@ function initializeEventListeners() {
     }
 
     // Add status modal
-    if (addStatusBackBtn) {
-        addStatusBackBtn.addEventListener('click', hideAddStatusModal);
-    }
-    if (addStatusPostBtn) {
-        addStatusPostBtn.addEventListener('click', postStatus);
-    }
+    addListenerIfExists(addStatusBackBtn, 'click', hideAddStatusModal);
+    addListenerIfExists(addStatusPostBtn, 'click', postStatus);
     if (addStatusModal) {
         addStatusModal.addEventListener('click', function(e) {
             if (e.target === addStatusModal) {
@@ -2913,17 +2909,11 @@ function initializeEventListeners() {
     handleMediaSelection();
 
     // User avatar click for settings
-    if (SettingControl) {
-        SettingControl.addEventListener('click', showUserSettings);
-    }
+    addListenerIfExists(SettingControl, 'click', showUserSettings);
 
     // Settings modal close buttons
-    if (settingsBackBtn) {
-        settingsBackBtn.addEventListener('click', hideUserSettings);
-    }
-    if (settingsCloseBtn) {
-        settingsCloseBtn.addEventListener('click', hideUserSettings);
-    }
+    addListenerIfExists(settingsBackBtn, 'click', hideUserSettings);
+    addListenerIfExists(settingsCloseBtn, 'click', hideUserSettings);
     if (userSettingsModal) {
         userSettingsModal.addEventListener('click', function(e) {
             if (e.target === userSettingsModal) {
@@ -2933,12 +2923,8 @@ function initializeEventListeners() {
     }
 
     // Edit profile modal close buttons
-    if (editProfileBackBtn) {
-        editProfileBackBtn.addEventListener('click', hideEditProfile);
-    }
-    if (editProfileSaveBtn) {
-        editProfileSaveBtn.addEventListener('click', saveProfileChanges);
-    }
+    addListenerIfExists(editProfileBackBtn, 'click', hideEditProfile);
+    addListenerIfExists(editProfileSaveBtn, 'click', saveProfileChanges);
     if (editProfileModal) {
         editProfileModal.addEventListener('click', function(e) {
             if (e.target === editProfileModal) {
@@ -2949,19 +2935,17 @@ function initializeEventListeners() {
 
     // Chat header click for profile
     const chatUserInfo = document.querySelector('.chat-user-info');
-    chatUserInfo.addEventListener('click', function(e) {
-        if (!e.target.closest('.back-btn')) {
-            showProfileModal();
-        }
-    });
+    if (chatUserInfo) {
+        chatUserInfo.addEventListener('click', function(e) {
+            if (!e.target.closest('.back-btn')) {
+                showProfileModal();
+            }
+        });
+    }
 
     // Profile modal close buttons
-    if (profileCloseBtn) {
-        profileCloseBtn.addEventListener('click', hideProfileModal);
-    }
-    if (profileBackBtn) {
-        profileBackBtn.addEventListener('click', hideProfileModal);
-    }
+    addListenerIfExists(profileCloseBtn, 'click', hideProfileModal);
+    addListenerIfExists(profileBackBtn, 'click', hideProfileModal);
     if (profileModal) {
         profileModal.addEventListener('click', function(e) {
             if (e.target === profileModal) {
@@ -2971,172 +2955,200 @@ function initializeEventListeners() {
     }
 
     // Chat menu
-    chatMenuBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleChatMenu();
-    });
+    if (chatMenuBtn) {
+        chatMenuBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleChatMenu();
+        });
+    }
 
-    clearChatBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        clearChat();
-        chatDropdownMenu.classList.remove('show');
-    });
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            clearChat();
+            chatDropdownMenu.classList.remove('show');
+        });
+    }
 
-    closeChatBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        closeChat();
-        chatDropdownMenu.classList.remove('show');
-    });
+    if (closeChatBtn) {
+        closeChatBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            closeChat();
+            chatDropdownMenu.classList.remove('show');
+        });
+    }
 
     // Modal event listeners
-    clearChatCancel.addEventListener('click', () => hideModal(clearChatModal));
-    clearChatConfirm.addEventListener('click', confirmClearChat);
-    closeChatCancel.addEventListener('click', () => hideModal(closeChatModal));
-    closeChatConfirm.addEventListener('click', confirmCloseChat);
+    addListenerIfExists(clearChatCancel, 'click', () => hideModal(clearChatModal));
+    addListenerIfExists(clearChatConfirm, 'click', confirmClearChat);
+    addListenerIfExists(closeChatCancel, 'click', () => hideModal(closeChatModal));
+    addListenerIfExists(closeChatConfirm, 'click', confirmCloseChat);
 
-    // Close modals when clicking overlay
-    clearChatModal.addEventListener('click', function(e) {
-        if (e.target === clearChatModal) {
-            hideModal(clearChatModal);
-        }
-    });
+    if (clearChatModal) {
+        clearChatModal.addEventListener('click', function(e) {
+            if (e.target === clearChatModal) {
+                hideModal(clearChatModal);
+            }
+        });
+    }
 
-    closeChatModal.addEventListener('click', function(e) {
-        if (e.target === closeChatModal) {
-            hideModal(closeChatModal);
-        }
-    });
+    if (closeChatModal) {
+        closeChatModal.addEventListener('click', function(e) {
+            if (e.target === closeChatModal) {
+                hideModal(closeChatModal);
+            }
+        });
+    }
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!chatMenuBtn.contains(e.target) && !chatDropdownMenu.contains(e.target)) {
-            chatDropdownMenu.classList.remove('show');
-        }
-        if (!contextMenu.contains(e.target)) {
-            contextMenu.style.display = 'none';
-        }
-    });
+    if (chatMenuBtn && chatDropdownMenu) {
+        document.addEventListener('click', function(e) {
+            if (!chatMenuBtn.contains(e.target) && !chatDropdownMenu.contains(e.target)) {
+                chatDropdownMenu.classList.remove('show');
+            }
+            if (contextMenu && !contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+            }
+        });
+    }
 
     // Chat item event listeners
     const chatItems = document.querySelectorAll('.chat-item');
-    chatItems.forEach(item => {
-        item.removeEventListener('click', handleChatClick);
-        item.removeEventListener('touchstart', handleChatClick);
-        
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleChatClick(this);
+    if (chatItems.length) {
+        chatItems.forEach(item => {
+            item.removeEventListener('click', handleChatClick);
+            item.removeEventListener('touchstart', handleChatClick);
+            
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleChatClick(this);
+            });
+            
+            item.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleChatClick(this);
+            }, { passive: false });
         });
-        
-        item.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleChatClick(this);
-        }, { passive: false });
-    });
+    }
 
     // Back button
-    backBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        goBackToChats();
-    });
+    if (backBtn) {
+        backBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            goBackToChats();
+        });
 
-    backBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        goBackToChats();
-    }, { passive: false });
+        backBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            goBackToChats();
+        }, { passive: false });
+    }
 
     // Search toggle button
-    searchToggleBtn.addEventListener('click', function(e) {
+    addListenerIfExists(searchToggleBtn, 'click', function(e) {
         e.preventDefault();
         toggleChatSearch();
     });
 
     // Close search button
-    closeSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(closeSearchBtn, 'click', function(e) {
         e.preventDefault();
         closeChatSearch();
     });
 
     // Search navigation buttons
-    prevSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(prevSearchBtn, 'click', function(e) {
         e.preventDefault();
         navigateSearch('prev');
     });
 
-    nextSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(nextSearchBtn, 'click', function(e) {
         e.preventDefault();
         navigateSearch('next');
     });
 
     // Send button
-    sendBtn.addEventListener('click', function(e) {
+    addListenerIfExists(sendBtn, 'click', function(e) {
         e.preventDefault();
         sendMessage();
     });
 
     // Message input
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    if (messageInput) {
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    }
 
     // Chat search input
-    chatSearchInput.addEventListener('input', (e) => {
-        searchInChat(e.target.value);
-    });
+    if (chatSearchInput) {
+        chatSearchInput.addEventListener('input', (e) => {
+            searchInChat(e.target.value);
+        });
 
-    chatSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            if (e.shiftKey) {
-                navigateSearch('prev');
-            } else {
-                navigateSearch('next');
+        chatSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    navigateSearch('prev');
+                } else {
+                    navigateSearch('next');
+                }
+            } else if (e.key === 'Escape') {
+                closeChatSearch();
             }
-        } else if (e.key === 'Escape') {
-            closeChatSearch();
-        }
-    });
+        });
+    }
 
     // File input
-    fileInput.addEventListener('change', handleFileSelect);
+    addListenerIfExists(fileInput, 'change', handleFileSelect);
 
     // Reply bar close
-    replyBarClose.addEventListener('click', closeReplyBar);
+    addListenerIfExists(replyBarClose, 'click', closeReplyBar);
 
     // Context menu events
-    document.getElementById('replyOption').addEventListener('click', handleReply);
-    document.getElementById('editOption').addEventListener('click', handleEdit);
-    document.getElementById('copyOption').addEventListener('click', handleCopy);
-    document.getElementById('deleteOption').addEventListener('click', handleDelete);
+    const replyOption = document.getElementById('replyOption');
+    const editOption = document.getElementById('editOption');
+    const copyOption = document.getElementById('copyOption');
+    const deleteOption = document.getElementById('deleteOption');
+    if (replyOption) replyOption.addEventListener('click', handleReply);
+    if (editOption) editOption.addEventListener('click', handleEdit);
+    if (copyOption) copyOption.addEventListener('click', handleCopy);
+    if (deleteOption) deleteOption.addEventListener('click', handleDelete);
 
     // Message action buttons (arrow icons)
-    chatMessages.addEventListener('click', handleMessageActionClick);
+    if (chatMessages) {
+        chatMessages.addEventListener('click', handleMessageActionClick);
+    }
 
     // Sidebar search
     const searchInput = document.querySelector('.search-input');
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const chatItems = document.querySelectorAll('.chat-item');
-        
-        chatItems.forEach(item => {
-            const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
-            const lastMessage = item.querySelector('.last-message').textContent.toLowerCase();
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const chatItems = document.querySelectorAll('.chat-item');
             
-            if (chatName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
-                item.style.display = 'flex';
-            } else {
-                item.style.display = 'none';
-            }
+            chatItems.forEach(item => {
+                const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
+                const lastMessage = item.querySelector('.last-message').textContent.toLowerCase();
+                
+                if (chatName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
         });
-    });
+    }
+
 }
 
 
@@ -3408,52 +3420,43 @@ function handleChatClick(element) {
 }
 
 // Open chat function
-function openChat(name, avatar, status, gradient = '#ff6b6b, #feca57') {
-    try {
-        welcomeScreen.style.display = 'none';
-        chatInterface.style.display = 'flex';
-        
-        chatName.textContent = name;
-        chatStatus.textContent = status;
-        chatAvatar.textContent = avatar;
-        chatAvatar.style.background = `linear-gradient(45deg, ${gradient})`;
-        
-        currentChatInfo = currentChatData.profiles[name] || {
-            type: 'contact',
-            name: name,
-            avatar: avatar,
-            avatarGradient: `linear-gradient(45deg, ${gradient})`,
-            status: status,
-            isOnline: status === 'Online'
-        };
-        
-        loadChatMessages(name);
-        closeChatSearch();
-        closeReplyBar();
-        chatDropdownMenu.classList.remove('show');
-        
-        if (isMobileDevice()) {
-            setTimeout(() => {
-                sidebar.classList.add('hide');
-                mainChat.classList.add('show');
-            }, 50);
-        }
-        
-        document.querySelectorAll('.chat-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        
-        const clickedItem = document.querySelector(`[data-name="${name}"]`);
-        if (clickedItem) {
-            clickedItem.classList.add('active');
-        }
-        
-        setTimeout(() => {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }, 100);
-        
-    } catch (error) {
-        console.error('Error opening chat:', error);
+// Handle chat item click to toggle between chat list and messages on mobile
+function openChat(userName) {
+
+    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
+    const chatNameElement = document.getElementById('chatName');
+    const chatMessagesElement = document.getElementById('chatMessages');
+    const sidebarElement = document.getElementById('sidebar');
+    const mainChatElement = document.getElementById('mainChat');
+
+    // Update chat details
+    chatNameElement.innerText = userName;
+    chatMessagesElement.innerHTML = `
+        <div class="message received">
+            <div class="message-bubble">
+                <div class="message-content">Hey! How are you doing today? 😊</div>
+                <div class="message-time">2:30 PM</div>
+            </div>
+        </div>
+    `;
+
+    if (isMobile) {
+        // Hide sidebar and show main chat on mobile
+        sidebarElement.classList.add('d-none');
+        mainChatElement.classList.add('active');
+    }
+}
+
+// Handle back button click to return to chat list on mobile
+function goBackToChatList() {
+    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
+    const sidebarElement = document.getElementById('sidebar');
+    const mainChatElement = document.getElementById('mainChat');
+
+    if (isMobile) {
+        // Show sidebar and hide main chat on mobile
+        sidebarElement.classList.remove('d-none');
+        mainChatElement.classList.remove('active');
     }
 }
 
@@ -3761,11 +3764,12 @@ function sendMessage() {
 
 // Handle window resize
 window.addEventListener('resize', () => {
+    if (!sidebar || !mainChat) return;
     if (window.innerWidth > 768) {
         sidebar.classList.remove('hide');
         mainChat.classList.remove('show');
     } else {
-        if (chatInterface.style.display === 'flex') {
+        if (chatInterface && chatInterface.style.display === 'flex') {
             sidebar.classList.add('hide');
             mainChat.classList.add('show');
         } else {
@@ -3780,21 +3784,23 @@ let touchStartX = 0;
 let touchEndX = 0;
 
 function handleGesture() {
-    if (isMobileDevice() && chatInterface.style.display === 'flex') {
+    if (isMobileDevice() && chatInterface && chatInterface.style.display === 'flex') {
         if (touchEndX > touchStartX + 50) {
             goBackToChats();
         }
     }
 }
 
-chatMessages.addEventListener('touchstart', e => {
-    touchStartX = e.changedTouches[0].screenX;
-}, { passive: true });
+if (chatMessages) {
+    chatMessages.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
 
-chatMessages.addEventListener('touchend', e => {
-    touchEndX = e.changedTouches[0].screenX;
-    handleGesture();
-}, { passive: true });
+    chatMessages.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleGesture();
+    }, { passive: true });
+}
 
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -3804,12 +3810,12 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     
     setTimeout(() => {
-        if (chatMessages.children.length > 0) {
+        if (chatMessages && chatMessages.children.length > 0) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
     }, 100);
 
-    if (isMobileDevice()) {
+    if (isMobileDevice() && chatInterface && welcomeScreen && sidebar && mainChat) {
         chatInterface.style.display = 'none';
         welcomeScreen.style.display = 'flex';
         sidebar.classList.remove('hide');
@@ -3819,7 +3825,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize on window load as backup
 window.addEventListener('load', () => {
-    if (isMobileDevice()) {
+    if (isMobileDevice() && chatInterface && welcomeScreen && sidebar && mainChat) {
         chatInterface.style.display = 'none';
         welcomeScreen.style.display = 'flex';
         sidebar.classList.remove('hide');
@@ -3916,5 +3922,6 @@ function initializeCallEventListeners() {
 }
 
 initializeCallEventListeners();
+
 
 
