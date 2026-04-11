@@ -158,6 +158,7 @@ let isSpeakerOn = false;
 let isCameraOn = false;
 let isIncomingCall = false;
 let currentCallType = 'audio';
+let activeChatUser = null;
 
 // User settings data
 let userSettings = {
@@ -3422,29 +3423,38 @@ function handleChatClick(element) {
 // Open chat function
 // Handle chat item click to toggle between chat list and messages on mobile
 function openChat(userName) {
-
-    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    // Update chat details
-    chatNameElement.innerText = userName;
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hey! How are you doing today? 😊</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-    `;
-
-    if (isMobile) {
-        // Hide sidebar and show main chat on mobile
-        sidebarElement.classList.add('d-none');
-        mainChatElement.classList.add('active');
+    if (!userName) {
+        return;
     }
+
+    activeChatUser = userName;
+
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Tap to chat';
+    }
+    if (chatAvatar) {
+        chatAvatar.innerText = userName.substring(0, 2).toUpperCase();
+    }
+
+    if (welcomeScreen && chatInterface) {
+        welcomeScreen.style.display = 'none';
+        chatInterface.style.display = 'flex';
+    }
+
+    if (isMobileDevice()) {
+        if (sidebar) sidebar.classList.add('hide');
+        if (mainChat) mainChat.classList.add('show');
+    }
+
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const nameElement = item.querySelector('.chat-name');
+        item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
+    });
+
+    loadConversationMessages(userName);
 }
 
 // Handle back button click to return to chat list on mobile
@@ -3734,32 +3744,112 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
 
 function sendMessage() {
     const text = messageInput.value.trim();
-    if (text) {
-        addMessage(text, true);
-        messageInput.value = '';
-        
-        typingIndicator.style.display = 'flex';
-        
-        setTimeout(() => {
-            typingIndicator.style.display = 'none';
-            const responses = [
-                "That's interesting! Tell me more. 🤔",
-                "I completely agree with you! 👍",
-                "Thanks for sharing that with me. 😊",
-                "That sounds like a great idea! 💡",
-                "I'll definitely consider that. 🤝",
-                "Awesome! Let's do it! 🚀",
-                "Haha, that's funny! 😂",
-                "Sure thing! No problem. ✅",
-                "Interesting perspective! 🧠",
-                "I love that idea! ❤️",
-                "You're absolutely right! 💯",
-                "That makes perfect sense. 🎯"
-            ];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            addMessage(randomResponse, false);
-        }, Math.random() * 2000 + 1000);
+    const sender = getLoggedInUsername();
+
+    if (!text) {
+        return;
     }
+
+    if (!sender) {
+        showNotification('Login session missing. Please re-login.');
+        return;
+    }
+
+    if (!activeChatUser) {
+        showNotification('Select a chat user first.');
+        return;
+    }
+
+    fetch('/chatapp/send-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: 'sender=' + encodeURIComponent(sender)
+            + '&receiver=' + encodeURIComponent(activeChatUser)
+            + '&message=' + encodeURIComponent(text)
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to send message (' + response.status + ')');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const time = formatMessageTime(data.timestamp);
+            const messageId = ++messageIdCounter;
+
+            const emptyState = chatMessages.querySelector('.empty-chat');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            addMessageToChat(text, true, time, true, messageId);
+            saveMessageToData(text, true, time, messageId);
+            messageInput.value = '';
+            loadRecentChats();
+        })
+        .catch(error => {
+            console.error('Error sending message:', error);
+            showNotification('Failed to send message');
+        });
+}
+
+function loadConversationMessages(otherUser) {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || !otherUser || !chatMessages) {
+        return;
+    }
+
+    const existing = chatMessages.querySelectorAll('.message, .empty-chat');
+    existing.forEach(item => item.remove());
+
+    fetch('/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser) + '&otherUser=' + encodeURIComponent(otherUser))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load messages');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const messages = Array.isArray(data.messages) ? data.messages : [];
+
+            currentChatData.messages[otherUser] = [];
+
+            if (messages.length === 0) {
+                showEmptyChatState();
+                return;
+            }
+
+            messages.forEach(msg => {
+                const isSent = msg.sender === currentUser;
+                const time = formatMessageTime(msg.timestamp);
+                const localId = ++messageIdCounter;
+                const content = msg.message || '';
+
+                addMessageToChat(content, isSent, time, false, localId);
+                saveMessageToData(content, isSent, time, localId);
+            });
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        })
+        .catch(error => {
+            console.error('Error loading conversation messages:', error);
+            showEmptyChatState();
+        });
+}
+
+function formatMessageTime(timestamp) {
+    if (!timestamp) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // Handle window resize
@@ -3802,11 +3892,99 @@ if (chatMessages) {
     }, { passive: true });
 }
 
+// Function to load recent chats dynamically
+function loadRecentChats() {
+    const username = getLoggedInUsername(); // Get username from session or localStorage
+    
+    if (!username) {
+        console.warn("No username found. Recent chats not loaded.");
+        return;
+    }
+
+    fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}`)
+        .then(response => response.json())
+        .then(data => {
+            const chatList = document.getElementById('chatList');
+            if (!chatList) return;
+
+            chatList.innerHTML = '';
+
+            if (data.length === 0) {
+                // Show message when no recent chats
+                chatList.innerHTML = `
+                    <div class="no-chats-message">
+                        <div class="no-chats-icon">💬</div>
+                        <p>No recent chats</p>
+                        <p class="tap-to-chat">Tap to start a new chat</p>
+                    </div>
+                `;
+            } else {
+                // Populate recent chats
+                data.forEach(chat => {
+                    const chatItem = createChatItem(chat, username);
+                    chatList.appendChild(chatItem);
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching recent chats:", error);
+            const chatList = document.getElementById('chatList');
+            if (chatList) {
+                chatList.innerHTML = `<div class="chat-error">Failed to load chats</div>`;
+            }
+        });
+}
+
+// Helper function to get logged-in username
+function getLoggedInUsername() {
+    if (window.loggedInUsername && window.loggedInUsername.trim()) {
+        return window.loggedInUsername.trim();
+    }
+
+    // Try to get from session storage first
+    let username = sessionStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to get from localStorage
+    username = localStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to extract from page/DOM
+    const userElement = document.getElementById('currentUsername');
+    if (userElement) return userElement.textContent;
+    
+    return null;
+}
+
+// Helper function to create a chat item element
+function createChatItem(chat, currentUser) {
+    const chatItem = document.createElement('div');
+    chatItem.className = 'chat-item';
+    
+    const displayName = chat.username;
+    const initials = displayName.substring(0, 2).toUpperCase();
+    const lastMessage = chat.lastMessage || "No messages yet";
+    
+    chatItem.innerHTML = `
+        <div class="chat-avatar">${initials}</div>
+        <div class="chat-info">
+            <div class="chat-name">${displayName}</div>
+            <div class="chat-preview">
+                <div class="last-message">${lastMessage.substring(0, 30)}${lastMessage.length > 30 ? '...' : ''}</div>
+            </div>
+        </div>
+    `;
+    
+    chatItem.onclick = () => openChat(displayName, chat.conversationId);
+    return chatItem;
+}
+
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);
+    loadRecentChats(); // Load recent chats dynamically
     initializeEventListeners();
     
     setTimeout(() => {

@@ -181,66 +181,10 @@
                     <div class="message-input-wrapper">
                         <input type="text" class="message-input" placeholder="Type a message" id="messageInput">
                     </div>
-                    <button class="send-btn" id="sendBtn">
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
             </div>
         </div>
     </div>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        function openChat(userName) {
-    const isMobile = window.innerWidth < 768;
-
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    const welcomeScreen = document.getElementById('welcomeScreen');
-    const chatInterface = document.getElementById('chatInterface');
-
-    // ✅ SHOW CHAT UI
-    welcomeScreen.style.display = "none";
-    chatInterface.style.display = "flex";
-
-    // ✅ Update chat name
-    chatNameElement.innerText = userName;
-
-    // ✅ Load messages (dummy for now)
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hello, this is ${userName}'s chat!</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-        <div class="message sent">
-            <div class="message-bubble">
-                <div class="message-content">Hi ${userName}, how can I help you?</div>
-                <div class="message-time">2:32 PM</div>
-            </div>
-        </div>
-    `;
-
-    // ✅ Mobile view handling
-    if (isMobile) {
-    sidebarElement.classList.add('hide');
-    mainChatElement.classList.add('show');
-}
-}
-document.getElementById("backBtn").addEventListener("click", () => {
-    const sidebar = document.getElementById('sidebar');
-    const mainChat = document.getElementById('mainChat');
-
-    // ✅ reverse animation
-    sidebar.classList.remove("hide");
-    mainChat.classList.remove("show");
-});
-
-        // Expose functions globally for testing
-        window.openChat = openChat;
-        window.showSidebar = showSidebar;
-    });
-</script>

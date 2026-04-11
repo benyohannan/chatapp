@@ -21,81 +21,140 @@
     <div class="search-container">
         <div class="search-box">
             <i class="fas fa-search"></i>
-            <input type="text" class="search-input" placeholder="Search or start new chat">
+            <input type="text" class="search-input" id="chatUserSearch" placeholder="Search or start new chat">
         </div>
+        <div id="userSuggestions" class="user-suggestions" style="display:none;"></div>
     </div>
 
     <!-- Chat List -->
     <div class="chat-list" id="chatList">
-        <div class="chat-item" onclick="openChat('John Doe')">
-            <div class="chat-avatar">JD</div>
-            <div class="chat-info">
-                <div class="chat-name">John Doe</div>
-                <div class="chat-preview"><div class="last-message">Hey! How are you doing? 😊</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Sarah Wilson')">
-            <div class="chat-avatar">SW</div>
-            <div class="chat-info">
-                <div class="chat-name">Sarah Wilson</div>
-                <div class="chat-preview"><div class="last-message">Thanks for the help earlier!</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Jodan')">
-            <div class="chat-avatar">JD</div>
-            <div class="chat-info">
-                <div class="chat-name">Jodan</div>
-                <div class="chat-preview"><div class="last-message">Thanks for the help earlier!</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Sara Ali')">
-            <div class="chat-avatar">SA</div>
-            <div class="chat-info">
-                <div class="chat-name">Sara Ali</div>
-                <div class="chat-preview"><div class="last-message">Thanks for the help earlier!</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Team Group')">
-            <div class="chat-avatar">TG</div>
-            <div class="chat-info">
-                <div class="chat-name">Team Group</div>
-                <div class="chat-preview"><div class="last-message">Mike: Let's schedule the meeting</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Alex Johnson')">
-            <div class="chat-avatar">AJ</div>
-            <div class="chat-info">
-                <div class="chat-name">Alex Johnson</div>
-                <div class="chat-preview"><div class="last-message">Perfect! See you tomorrow 👍</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Emma Davis')">
-            <div class="chat-avatar">ED</div>
-            <div class="chat-info">
-                <div class="chat-name">Emma Davis</div>
-                <div class="chat-preview"><div class="last-message">Can you send me the documents?</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Family Group')">
-            <div class="chat-avatar">FG</div>
-            <div class="chat-info">
-                <div class="chat-name">Family Group</div>
-                <div class="chat-preview"><div class="last-message">Mom: Don't forget dinner on Sunday!</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Mike Chen')">
-            <div class="chat-avatar">MC</div>
-            <div class="chat-info">
-                <div class="chat-name">Mike Chen</div>
-                <div class="chat-preview"><div class="last-message">Great work on the presentation!</div></div>
-            </div>
-        </div>
-        <div class="chat-item" onclick="openChat('Lisa Park')">
-            <div class="chat-avatar">LP</div>
-            <div class="chat-info">
-                <div class="chat-name">Lisa Park</div>
-                <div class="chat-preview"><div class="last-message">Let's catch up soon! 🎨</div></div>
-            </div>
-        </div>
+        <!-- Dynamic content will be loaded here -->
+        <div class="loading-message">Loading chats...</div>
     </div>
+
+    <script>
+        const loggedInUsername = '<%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %>';
+        window.loggedInUsername = loggedInUsername;
+        if (loggedInUsername) {
+            sessionStorage.setItem('username', loggedInUsername);
+            localStorage.setItem('username', loggedInUsername);
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            fetchRecentChats();
+            initUserSearch();
+        });
+
+        function fetchRecentChats() {
+            const username = loggedInUsername;
+
+            if (!username) {
+                console.error("Username not found in session");
+                return;
+            }
+
+            fetch('/chatapp/recent-chats?username=' + encodeURIComponent(username))
+                .then(response => response.json())
+                .then(data => {
+                    const chatList = document.getElementById("chatList");
+                    chatList.innerHTML = "";
+
+                    if (data.length === 0) {
+                        chatList.innerHTML = '<div class="no-chats">Tap to chat</div>';
+                    } else {
+                        data.forEach(chat => {
+                            const chatItem = document.createElement("div");
+                            chatItem.className = "chat-item";
+                            const otherParticipant = (chat.participants || []).find(p => p !== username) || "Unknown";
+                            const avatar = otherParticipant.charAt(0).toUpperCase();
+                            const lastMessage = chat.lastMessage || "No messages yet";
+
+                            chatItem.onclick = () => openChat(otherParticipant);
+
+                            chatItem.innerHTML =
+                                '<div class="chat-avatar">' + avatar + '</div>' +
+                                '<div class="chat-info">' +
+                                    '<div class="chat-name">' + otherParticipant + '</div>' +
+                                    '<div class="chat-preview">' +
+                                        '<div class="last-message">' + lastMessage + '</div>' +
+                                    '</div>' +
+                                '</div>';
+                            chatList.appendChild(chatItem);
+                        });
+                    }
+                })
+                .catch(error => console.error("Error fetching recent chats:", error));
+        }
+
+        function initUserSearch() {
+            const searchInput = document.getElementById("chatUserSearch");
+            const suggestionsBox = document.getElementById("userSuggestions");
+            let debounceTimer = null;
+
+            if (!searchInput || !suggestionsBox) {
+                return;
+            }
+
+            searchInput.addEventListener("input", function() {
+                const query = searchInput.value.trim();
+
+                clearTimeout(debounceTimer);
+
+                if (!query) {
+                    hideSuggestions();
+                    return;
+                }
+
+                debounceTimer = setTimeout(function() {
+                    fetch('/chatapp/search-users?query=' + encodeURIComponent(query) + '&currentUser=' + encodeURIComponent(loggedInUsername))
+                        .then(response => response.json())
+                        .then(users => renderSuggestions(users))
+                        .catch(error => {
+                            console.error("Error fetching user suggestions:", error);
+                            hideSuggestions();
+                        });
+                }, 180);
+            });
+
+            document.addEventListener("click", function(event) {
+                if (!suggestionsBox.contains(event.target) && event.target !== searchInput) {
+                    hideSuggestions();
+                }
+            });
+
+            function renderSuggestions(users) {
+                if (!Array.isArray(users) || users.length === 0) {
+                    suggestionsBox.innerHTML = '<div class="suggestion-empty">No users found</div>';
+                    suggestionsBox.style.display = "block";
+                    return;
+                }
+
+                suggestionsBox.innerHTML = "";
+
+                users.forEach(function(user) {
+                    const username = user && user.username ? user.username : "";
+                    if (!username) {
+                        return;
+                    }
+
+                    const item = document.createElement("div");
+                    item.className = "suggestion-item";
+                    item.textContent = username;
+                    item.addEventListener("click", function() {
+                        searchInput.value = "";
+                        hideSuggestions();
+                        openChat(username);
+                    });
+                    suggestionsBox.appendChild(item);
+                });
+
+                suggestionsBox.style.display = "block";
+            }
+
+            function hideSuggestions() {
+                suggestionsBox.style.display = "none";
+                suggestionsBox.innerHTML = "";
+            }
+        }
+    </script>
 </div>

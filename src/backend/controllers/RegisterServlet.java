@@ -8,6 +8,7 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 @WebServlet("/register")
@@ -34,7 +35,12 @@ public class RegisterServlet extends HttpServlet {
         try {
             MongoConnection connection = new MongoConnection();
             connection.saveUser(user);
-            response.sendRedirect("frontend/basic.jsp");
+
+            HttpSession session = request.getSession(true);
+            session.setAttribute("username", username.trim());
+            session.setAttribute("userId", username.trim());
+
+            request.getRequestDispatcher("/frontend/basic.jsp").forward(request, response);
         } catch (Exception e) {
             e.printStackTrace();
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Registration failed.");
