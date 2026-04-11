@@ -9,9 +9,7 @@
                         <i class="fas fa-moon"></i>
                     </button>
                 </li>
-                <li>
-                    <i class="fas fa-plus" id="groupChatBtn" title="Create Group" onclick="showGroupChatModal()"></i>
-                </li>
+                <li><i class="fas fa-circle-notch" id="Status" title="Status"></i></li>
                 <li><i class="fas fa-ellipsis-v" id="SettingControl" title="Menu"></i></li>
             </ul>
         </div>
@@ -100,3 +98,41 @@
     </div>
 </div>
 
+<div id="createRoomModal" class="modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); border-radius: 8px; z-index: 1000;">
+    <h3>Create Chat Room</h3>
+    <input type="text" id="roomName" placeholder="Enter room name" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px;">
+    <button id="createRoomSubmit" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Create</button>
+    <button id="closeModal" style="padding: 10px 20px; background: #ccc; color: black; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">Cancel</button>
+</div>
+
+<script>
+    // Function to toggle between light and dark modes
+    function toggleTheme() {
+        const body = document.body;
+        const themeIcon = document.getElementById('theme-icon');
+
+        // Toggle the class on the body
+        if (body.classList.contains('light-mode')) {
+            body.classList.remove('light-mode');
+            body.classList.add('dark-mode');
+            themeIcon.classList.remove('fa-moon');
+            themeIcon.classList.add('fa-sun');
+        } else {
+            body.classList.remove('dark-mode');
+            body.classList.add('light-mode');
+            themeIcon.classList.remove('fa-sun');
+            themeIcon.classList.add('fa-moon');
+        }
+    }
+
+    // Theme toggle logic
+    const themeToggle = document.getElementById('themeToggle');
+    const body = document.body;
+
+    themeToggle.addEventListener('click', toggleTheme);
+
+    // Add the theme toggle icon
+    const themeIcon = document.getElementById('theme-icon');
+    themeIcon.classList.add('fa-moon');
+    themeIcon.style.cursor = 'pointer';
+</script>
