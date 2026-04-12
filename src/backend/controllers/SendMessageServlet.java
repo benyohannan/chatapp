@@ -35,7 +35,10 @@ public class SendMessageServlet extends HttpServlet {
 
         try {
             Document conversation = conversationService.createOrGetConversation(sender.trim(), receiver.trim());
-            String conversationId = conversation.getObjectId("_id").toHexString();
+            String conversationId = conversationService.extractConversationId(conversation);
+            if (conversationId == null || conversationId.isBlank()) {
+                throw new IllegalStateException("Conversation id could not be resolved");
+            }
             String now = LocalDateTime.now().toString();
 
             conversationService.saveMessage(conversationId, sender.trim(), receiver.trim(), message.trim());
@@ -54,8 +57,9 @@ public class SendMessageServlet extends HttpServlet {
             out.write(json.toString());
             out.flush();
         } catch (Exception e) {
+            e.printStackTrace();
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.getWriter().write("{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            response.getWriter().write("{\"error\":\"" + escapeJson(e.getClass().getSimpleName() + ": " + e.getMessage()) + "\"}");
         }
     }
 

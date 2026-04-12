@@ -17,6 +17,11 @@
         </div>
     </div>
 
+    <div class="session-debug" style="padding: 8px 12px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">
+        <div><strong>User:</strong> <%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %></div>
+        <div><strong>Session:</strong> <%= session.getId() %></div>
+    </div>
+
     <!-- Search -->
     <div class="search-container">
         <div class="search-box">
@@ -34,7 +39,9 @@
 
     <script>
         const loggedInUsername = '<%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %>';
+        const currentSessionId = '<%= session.getId() %>';
         window.loggedInUsername = loggedInUsername;
+        window.currentSessionId = currentSessionId;
         if (loggedInUsername) {
             sessionStorage.setItem('username', loggedInUsername);
             localStorage.setItem('username', loggedInUsername);
@@ -53,7 +60,7 @@
                 return;
             }
 
-            fetch('/chatapp/recent-chats?username=' + encodeURIComponent(username))
+            fetch('/chatapp/get-recent-chats?username=' + encodeURIComponent(username))
                 .then(response => response.json())
                 .then(data => {
                     const chatList = document.getElementById("chatList");
@@ -65,7 +72,7 @@
                         data.forEach(chat => {
                             const chatItem = document.createElement("div");
                             chatItem.className = "chat-item";
-                            const otherParticipant = (chat.participants || []).find(p => p !== username) || "Unknown";
+                            const otherParticipant = (chat.username && chat.username.trim()) ? chat.username.trim() : "Unknown";
                             const avatar = otherParticipant.charAt(0).toUpperCase();
                             const lastMessage = chat.lastMessage || "No messages yet";
 

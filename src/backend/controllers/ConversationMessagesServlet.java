@@ -25,6 +25,9 @@ public class ConversationMessagesServlet extends HttpServlet {
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        response.setDateHeader("Expires", 0);
 
         if (isBlank(currentUser) || isBlank(otherUser)) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -34,7 +37,10 @@ public class ConversationMessagesServlet extends HttpServlet {
 
         try {
             Document conversation = conversationService.createOrGetConversation(currentUser.trim(), otherUser.trim());
-            String conversationId = conversation.getObjectId("_id").toHexString();
+            String conversationId = conversationService.extractConversationId(conversation);
+            if (conversationId == null || conversationId.isBlank()) {
+                throw new IllegalStateException("Conversation id could not be resolved");
+            }
             List<Document> messages = conversationService.getConversationMessages(conversationId);
 
             StringBuilder json = new StringBuilder();
@@ -71,8 +77,9 @@ public class ConversationMessagesServlet extends HttpServlet {
             out.write(json.toString());
             out.flush();
         } catch (Exception e) {
+            e.printStackTrace();
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.getWriter().write("{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            response.getWriter().write("{\"error\":\"" + escapeJson(e.getClass().getSimpleName() + ": " + e.getMessage()) + "\"}");
         }
     }
 

@@ -159,6 +159,10 @@ let isCameraOn = false;
 let isIncomingCall = false;
 let currentCallType = 'audio';
 let activeChatUser = null;
+let chatSocket = null;
+let isChatSocketReady = false;
+let activeChatSyncTimer = null;
+let conversationFetchCounter = 0;
 
 // User settings data
 let userSettings = {
@@ -2760,12 +2764,14 @@ function showEmptyChatState() {
 }
 
 function closeChat() {
+    stopActiveChatSync();
     showModal(closeChatModal);
 }
 
 function confirmCloseChat() {
     closeChatSearch();
     closeReplyBar();
+    stopActiveChatSync();
     
     chatInterface.style.display = 'none';
     welcomeScreen.style.display = 'flex';
@@ -3455,6 +3461,7 @@ function openChat(userName) {
     });
 
     loadConversationMessages(userName);
+    startActiveChatSync();
 }
 
 // Handle back button click to return to chat list on mobile
@@ -3500,10 +3507,32 @@ function goBackToChats() {
         closeChatSearch();
         closeReplyBar();
         chatDropdownMenu.classList.remove('show');
+        stopActiveChatSync();
         
         document.querySelectorAll('.chat-item').forEach(item => {
             item.classList.remove('active');
         });
+    }
+}
+
+function startActiveChatSync() {
+    stopActiveChatSync();
+
+    if (!activeChatUser) {
+        return;
+    }
+
+    activeChatSyncTimer = setInterval(() => {
+        if (activeChatUser) {
+            loadConversationMessages(activeChatUser);
+        }
+    }, 1200);
+}
+
+function stopActiveChatSync() {
+    if (activeChatSyncTimer) {
+        clearInterval(activeChatSyncTimer);
+        activeChatSyncTimer = null;
     }
 }
 
@@ -3787,6 +3816,8 @@ function sendMessage() {
             addMessageToChat(text, true, time, true, messageId);
             saveMessageToData(text, true, time, messageId);
             messageInput.value = '';
+
+            sendRealtimeMessage(sender, activeChatUser, text, data.timestamp);
             loadRecentChats();
         })
         .catch(error => {
@@ -3795,16 +3826,118 @@ function sendMessage() {
         });
 }
 
+function initChatSocket() {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING))) {
+        return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    chatSocket = new WebSocket(protocol + '//' + window.location.host + '/chatapp/ws/chat?username=' + encodeURIComponent(currentUser));
+
+    chatSocket.addEventListener('open', () => {
+        isChatSocketReady = true;
+        console.log('Chat socket connected for', currentUser);
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            const authPayload = {
+                type: 'auth',
+                username: currentUser
+            };
+            chatSocket.send(JSON.stringify(authPayload));
+        }
+    });
+
+    chatSocket.addEventListener('message', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (!data || data.type !== 'chat') {
+                return;
+            }
+
+            const loggedIn = getLoggedInUsername();
+            if (data.receiver !== loggedIn) {
+                return;
+            }
+
+            const fromUser = data.sender;
+            const text = data.message || '';
+            const time = formatMessageTime(data.timestamp);
+
+            if (!currentChatData.messages[fromUser]) {
+                currentChatData.messages[fromUser] = [];
+            }
+
+            const messageId = ++messageIdCounter;
+            saveMessageToData(text, false, time, messageId);
+
+            if (activeChatUser === fromUser) {
+                const emptyState = chatMessages.querySelector('.empty-chat');
+                if (emptyState) {
+                    emptyState.remove();
+                }
+                addMessageToChat(text, false, time, true, messageId);
+            }
+
+            loadRecentChats();
+        } catch (err) {
+            console.error('WebSocket message parse error:', err);
+        }
+    });
+
+    chatSocket.addEventListener('close', () => {
+        isChatSocketReady = false;
+        chatSocket = null;
+        console.warn('Chat socket disconnected, fallback sync remains active');
+        setTimeout(() => {
+            initChatSocket();
+        }, 1500);
+    });
+
+    chatSocket.addEventListener('error', (err) => {
+        isChatSocketReady = false;
+        console.error('WebSocket error:', err);
+    });
+}
+
+window.addEventListener('focus', () => {
+    if (activeChatUser) {
+        loadConversationMessages(activeChatUser);
+    }
+});
+
+function sendRealtimeMessage(sender, receiver, message, timestamp) {
+    if (!isChatSocketReady || !chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    const payload = {
+        type: 'chat',
+        sender: sender,
+        receiver: receiver,
+        message: message,
+        timestamp: timestamp || new Date().toISOString()
+    };
+
+    chatSocket.send(JSON.stringify(payload));
+}
+
 function loadConversationMessages(otherUser) {
     const currentUser = getLoggedInUsername();
     if (!currentUser || !otherUser || !chatMessages) {
         return;
     }
 
-    const existing = chatMessages.querySelectorAll('.message, .empty-chat');
-    existing.forEach(item => item.remove());
+    const requestId = ++conversationFetchCounter;
+    const requestUrl = '/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser)
+        + '&otherUser=' + encodeURIComponent(otherUser)
+        + '&_ts=' + Date.now();
 
-    fetch('/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser) + '&otherUser=' + encodeURIComponent(otherUser))
+    fetch(requestUrl, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    })
         .then(response => {
             if (!response.ok) {
                 throw new Error('Failed to load messages');
@@ -3812,9 +3945,16 @@ function loadConversationMessages(otherUser) {
             return response.json();
         })
         .then(data => {
+            if (requestId !== conversationFetchCounter) {
+                return;
+            }
+
             const messages = Array.isArray(data.messages) ? data.messages : [];
 
             currentChatData.messages[otherUser] = [];
+
+            const existing = chatMessages.querySelectorAll('.message, .empty-chat');
+            existing.forEach(item => item.remove());
 
             if (messages.length === 0) {
                 showEmptyChatState();
@@ -3986,6 +4126,7 @@ document.addEventListener('DOMContentLoaded', function() {
     applyChatFontSize(userSettings.chat.fontSize);
     loadRecentChats(); // Load recent chats dynamically
     initializeEventListeners();
+    initChatSocket();
     
     setTimeout(() => {
         if (chatMessages && chatMessages.children.length > 0) {

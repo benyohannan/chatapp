@@ -1,9 +1,8 @@
 package backend.services;
 
 import backend.database.MongoConnection;
-import backend.models.Conversation;
-import backend.models.Message;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.FindIterable;
@@ -52,7 +51,7 @@ public class ConversationService {
         MongoCollection<Document> conversations = db.getCollection("conversations");
 
         // Find existing conversation
-        Document query = new Document("participants", new Document("$all", new String[]{user1, user2}))
+        Document query = new Document("participants", new Document("$all", List.of(user1, user2)))
             .append("isGroupChat", false);
         Document existing = conversations.find(query).first();
 
@@ -74,7 +73,28 @@ public class ConversationService {
             .append("createdAt", LocalDateTime.now().toString());
 
         conversations.insertOne(newConversation);
+        if (!newConversation.containsKey("_id")) {
+            Document inserted = conversations.find(query).first();
+            if (inserted != null) {
+                return inserted;
+            }
+        }
         return newConversation;
+    }
+
+    public String extractConversationId(Document conversation) {
+        if (conversation == null) {
+            return null;
+        }
+
+        Object idObj = conversation.get("_id");
+        if (idObj instanceof ObjectId) {
+            return ((ObjectId) idObj).toHexString();
+        }
+        if (idObj != null) {
+            return idObj.toString();
+        }
+        return null;
     }
 
     /**
@@ -97,7 +117,12 @@ public class ConversationService {
         messages.insertOne(messageDoc);
 
         // Update the conversation's last message and time
-        Document updateQuery = new Document("_id", new org.bson.types.ObjectId(conversationId));
+        Document updateQuery;
+        try {
+            updateQuery = new Document("_id", new ObjectId(conversationId));
+        } catch (Exception ex) {
+            updateQuery = new Document("_id", conversationId);
+        }
         Document updateData = new Document("$set", new Document()
             .append("lastMessage", message)
             .append("lastMessageTime", LocalDateTime.now().toString()));
