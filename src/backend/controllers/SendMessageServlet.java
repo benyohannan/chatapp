@@ -40,13 +40,19 @@ public class SendMessageServlet extends HttpServlet {
                 throw new IllegalStateException("Conversation id could not be resolved");
             }
             String now = LocalDateTime.now().toString();
+            String clientMessageId = request.getParameter("clientMessageId");
+            if (isBlank(clientMessageId)) {
+                clientMessageId = null;
+            }
 
-            conversationService.saveMessage(conversationId, sender.trim(), receiver.trim(), message.trim());
+            String messageId = conversationService.saveMessage(conversationId, sender.trim(), receiver.trim(), message.trim(), clientMessageId);
 
             StringBuilder json = new StringBuilder();
             json.append("{")
                 .append("\"success\":true,")
                 .append("\"conversationId\":\"").append(escapeJson(conversationId)).append("\",")
+                .append("\"messageId\":\"").append(escapeJson(messageId)).append("\",")
+                .append("\"clientMessageId\":\"").append(escapeJson(clientMessageId)).append("\",")
                 .append("\"sender\":\"").append(escapeJson(sender.trim())).append("\",")
                 .append("\"receiver\":\"").append(escapeJson(receiver.trim())).append("\",")
                 .append("\"message\":\"").append(escapeJson(message.trim())).append("\",")

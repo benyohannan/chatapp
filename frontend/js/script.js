@@ -162,7 +162,10 @@ let activeChatUser = null;
 let chatSocket = null;
 let isChatSocketReady = false;
 let activeChatSyncTimer = null;
-let conversationFetchCounter = 0;
+let isConversationFetchInFlight = false;
+let realtimeBadge = null;
+let displayedConversationUser = null;
+let renderedMessageKeysByConversation = {};
 
 // User settings data
 let userSettings = {
@@ -3394,6 +3397,49 @@ function removeMessageFromData(messageId) {
     }
 }
 
+function getConversationMessageKey(message) {
+    if (!message) {
+        return '';
+    }
+
+    if (message.clientMessageId) {
+        return 'client:' + message.clientMessageId;
+    }
+
+    if (message.messageId) {
+        return 'server:' + message.messageId;
+    }
+
+    if (message.id) {
+        return 'db:' + message.id;
+    }
+
+    return 'sig:' + [message.sender || '', message.receiver || '', message.timestamp || '', message.message || ''].join('|');
+}
+
+function getConversationRenderedSet(userName) {
+    if (!renderedMessageKeysByConversation[userName]) {
+        renderedMessageKeysByConversation[userName] = new Set();
+    }
+    return renderedMessageKeysByConversation[userName];
+}
+
+function resetConversationRenderState(userName) {
+    renderedMessageKeysByConversation[userName] = new Set();
+}
+
+function isConversationMessageRendered(userName, messageKey) {
+    return getConversationRenderedSet(userName).has(messageKey);
+}
+
+function markConversationMessageRendered(userName, messageKey) {
+    getConversationRenderedSet(userName).add(messageKey);
+}
+
+function removeRenderedConversationMessage(userName, messageKey) {
+    getConversationRenderedSet(userName).delete(messageKey);
+}
+
 function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
     const currentChatName = chatName.textContent;
     if (!currentChatData.messages[currentChatName]) {
@@ -3434,6 +3480,7 @@ function openChat(userName) {
     }
 
     activeChatUser = userName;
+    displayedConversationUser = userName;
 
     if (chatName) {
         chatName.innerText = userName;
@@ -3460,7 +3507,7 @@ function openChat(userName) {
         item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
     });
 
-    loadConversationMessages(userName);
+    loadConversationMessages(userName, true);
     startActiveChatSync();
 }
 
@@ -3508,6 +3555,7 @@ function goBackToChats() {
         closeReplyBar();
         chatDropdownMenu.classList.remove('show');
         stopActiveChatSync();
+        displayedConversationUser = null;
         
         document.querySelectorAll('.chat-item').forEach(item => {
             item.classList.remove('active');
@@ -3524,9 +3572,9 @@ function startActiveChatSync() {
 
     activeChatSyncTimer = setInterval(() => {
         if (activeChatUser) {
-            loadConversationMessages(activeChatUser);
+            loadConversationMessages(activeChatUser, false);
         }
-    }, 1200);
+    }, 2000);
 }
 
 function stopActiveChatSync() {
@@ -3715,6 +3763,7 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     if (messageId) {
         messageDiv.setAttribute('data-message-id', messageId);
+        messageDiv.setAttribute('data-message-key', messageId);
     }
     if (animate) {
         messageDiv.style.animation = 'messageSlide 0.3s ease-out';
@@ -3789,6 +3838,19 @@ function sendMessage() {
         return;
     }
 
+    const clientMessageId = 'cmid-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    const optimisticTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(text, true, optimisticTime, true, clientMessageId);
+    saveMessageToData(text, true, optimisticTime, clientMessageId);
+    markConversationMessageRendered(activeChatUser, 'client:' + clientMessageId);
+    messageInput.value = '';
+
     fetch('/chatapp/send-message', {
         method: 'POST',
         headers: {
@@ -3797,6 +3859,7 @@ function sendMessage() {
         body: 'sender=' + encodeURIComponent(sender)
             + '&receiver=' + encodeURIComponent(activeChatUser)
             + '&message=' + encodeURIComponent(text)
+            + '&clientMessageId=' + encodeURIComponent(clientMessageId)
     })
         .then(response => {
             if (!response.ok) {
@@ -3805,23 +3868,22 @@ function sendMessage() {
             return response.json();
         })
         .then(data => {
-            const time = formatMessageTime(data.timestamp);
-            const messageId = ++messageIdCounter;
-
-            const emptyState = chatMessages.querySelector('.empty-chat');
-            if (emptyState) {
-                emptyState.remove();
+            const serverMessageId = data.messageId || '';
+            if (serverMessageId) {
+                markConversationMessageRendered(activeChatUser, 'server:' + serverMessageId);
             }
 
-            addMessageToChat(text, true, time, true, messageId);
-            saveMessageToData(text, true, time, messageId);
-            messageInput.value = '';
-
-            sendRealtimeMessage(sender, activeChatUser, text, data.timestamp);
+            sendRealtimeMessage(sender, activeChatUser, text, data.timestamp, serverMessageId, clientMessageId);
             loadRecentChats();
         })
         .catch(error => {
             console.error('Error sending message:', error);
+            removeMessageFromData(clientMessageId);
+            removeRenderedConversationMessage(activeChatUser, 'client:' + clientMessageId);
+            const failedMessage = chatMessages.querySelector('[data-message-key="' + clientMessageId + '"]');
+            if (failedMessage) {
+                failedMessage.remove();
+            }
             showNotification('Failed to send message');
         });
 }
@@ -3837,6 +3899,7 @@ function initChatSocket() {
 
     chatSocket.addEventListener('open', () => {
         isChatSocketReady = true;
+        updateRealtimeBadge('WS connected', '#1f8b4c');
         console.log('Chat socket connected for', currentUser);
         if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
             const authPayload = {
@@ -3854,6 +3917,8 @@ function initChatSocket() {
                 return;
             }
 
+            markRealtimeSync('ws');
+
             const loggedIn = getLoggedInUsername();
             if (data.receiver !== loggedIn) {
                 return;
@@ -3863,19 +3928,22 @@ function initChatSocket() {
             const text = data.message || '';
             const time = formatMessageTime(data.timestamp);
 
+            const messageData = {
+                id: data.messageId || data.clientMessageId || data.timestamp || ('ws-' + Date.now()),
+                content: text,
+                time: time,
+                clientMessageId: data.clientMessageId || ''
+            };
+
             if (!currentChatData.messages[fromUser]) {
                 currentChatData.messages[fromUser] = [];
             }
 
-            const messageId = ++messageIdCounter;
-            saveMessageToData(text, false, time, messageId);
-
             if (activeChatUser === fromUser) {
-                const emptyState = chatMessages.querySelector('.empty-chat');
-                if (emptyState) {
-                    emptyState.remove();
-                }
-                addMessageToChat(text, false, time, true, messageId);
+                const conversationKey = getConversationMessageKey(data);
+                appendConversationMessage(fromUser, messageData, false, true, conversationKey);
+            } else {
+                saveMessageToData(text, false, time, messageData.id);
             }
 
             loadRecentChats();
@@ -3887,6 +3955,7 @@ function initChatSocket() {
     chatSocket.addEventListener('close', () => {
         isChatSocketReady = false;
         chatSocket = null;
+        updateRealtimeBadge('WS disconnected (fallback active)', '#b45f06');
         console.warn('Chat socket disconnected, fallback sync remains active');
         setTimeout(() => {
             initChatSocket();
@@ -3895,6 +3964,7 @@ function initChatSocket() {
 
     chatSocket.addEventListener('error', (err) => {
         isChatSocketReady = false;
+        updateRealtimeBadge('WS error (fallback active)', '#a61b29');
         console.error('WebSocket error:', err);
     });
 }
@@ -3905,7 +3975,7 @@ window.addEventListener('focus', () => {
     }
 });
 
-function sendRealtimeMessage(sender, receiver, message, timestamp) {
+function sendRealtimeMessage(sender, receiver, message, timestamp, messageId, clientMessageId) {
     if (!isChatSocketReady || !chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
         return;
     }
@@ -3915,19 +3985,26 @@ function sendRealtimeMessage(sender, receiver, message, timestamp) {
         sender: sender,
         receiver: receiver,
         message: message,
-        timestamp: timestamp || new Date().toISOString()
+        timestamp: timestamp || new Date().toISOString(),
+        messageId: messageId || '',
+        clientMessageId: clientMessageId || ''
     };
 
     chatSocket.send(JSON.stringify(payload));
 }
 
-function loadConversationMessages(otherUser) {
+function loadConversationMessages(otherUser, replaceAll = false) {
     const currentUser = getLoggedInUsername();
     if (!currentUser || !otherUser || !chatMessages) {
         return;
     }
 
-    const requestId = ++conversationFetchCounter;
+    if (isConversationFetchInFlight) {
+        return;
+    }
+
+    isConversationFetchInFlight = true;
+
     const requestUrl = '/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser)
         + '&otherUser=' + encodeURIComponent(otherUser)
         + '&_ts=' + Date.now();
@@ -3945,16 +4022,15 @@ function loadConversationMessages(otherUser) {
             return response.json();
         })
         .then(data => {
-            if (requestId !== conversationFetchCounter) {
-                return;
-            }
-
             const messages = Array.isArray(data.messages) ? data.messages : [];
 
-            currentChatData.messages[otherUser] = [];
+            if (replaceAll || displayedConversationUser !== otherUser) {
+                currentChatData.messages[otherUser] = [];
+                resetConversationRenderState(otherUser);
 
-            const existing = chatMessages.querySelectorAll('.message, .empty-chat');
-            existing.forEach(item => item.remove());
+                const existing = chatMessages.querySelectorAll('.message, .empty-chat');
+                existing.forEach(item => item.remove());
+            }
 
             if (messages.length === 0) {
                 showEmptyChatState();
@@ -3962,21 +4038,98 @@ function loadConversationMessages(otherUser) {
             }
 
             messages.forEach(msg => {
+                const messageKey = getConversationMessageKey(msg);
+                if (isConversationMessageRendered(otherUser, messageKey)) {
+                    return;
+                }
+
                 const isSent = msg.sender === currentUser;
                 const time = formatMessageTime(msg.timestamp);
-                const localId = ++messageIdCounter;
-                const content = msg.message || '';
+                const messageData = {
+                    id: msg.id || msg.messageId || msg.clientMessageId || messageKey,
+                    content: msg.message || '',
+                    time: time,
+                    type: isSent ? 'sent' : 'received',
+                    replyTo: msg.replyTo || null,
+                    clientMessageId: msg.clientMessageId || ''
+                };
 
-                addMessageToChat(content, isSent, time, false, localId);
-                saveMessageToData(content, isSent, time, localId);
+                appendConversationMessage(otherUser, messageData, isSent, false, messageKey);
             });
 
             chatMessages.scrollTop = chatMessages.scrollHeight;
+            markRealtimeSync('poll');
         })
         .catch(error => {
             console.error('Error loading conversation messages:', error);
             showEmptyChatState();
+        })
+        .finally(() => {
+            isConversationFetchInFlight = false;
         });
+}
+
+function appendConversationMessage(conversationUser, messageData, isSent, animate, messageKey) {
+    const currentUser = getLoggedInUsername();
+    const key = messageKey || getConversationMessageKey(messageData);
+
+    if (isConversationMessageRendered(conversationUser, key)) {
+        return false;
+    }
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(messageData.content, isSent, messageData.time, animate, key, messageData.replyTo);
+    saveMessageToData(messageData.content, isSent, messageData.time, key, messageData.replyTo);
+    markConversationMessageRendered(conversationUser, key);
+    return true;
+}
+
+function initRealtimeBadge() {
+    if (realtimeBadge || !document.body) {
+        return;
+    }
+
+    realtimeBadge = document.createElement('div');
+    realtimeBadge.id = 'realtimeStatusBadge';
+    realtimeBadge.style.position = 'fixed';
+    realtimeBadge.style.right = '12px';
+    realtimeBadge.style.bottom = '12px';
+    realtimeBadge.style.zIndex = '9999';
+    realtimeBadge.style.padding = '8px 10px';
+    realtimeBadge.style.borderRadius = '8px';
+    realtimeBadge.style.fontSize = '11px';
+    realtimeBadge.style.lineHeight = '1.35';
+    realtimeBadge.style.color = '#fff';
+    realtimeBadge.style.background = 'rgba(18, 18, 18, 0.88)';
+    realtimeBadge.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.25)';
+    realtimeBadge.style.maxWidth = '210px';
+    realtimeBadge.innerHTML = '<div id="realtimeState">WS connecting...</div><div id="realtimeLastSync">Last sync: -</div>';
+
+    document.body.appendChild(realtimeBadge);
+}
+
+function updateRealtimeBadge(text, color) {
+    const stateEl = document.getElementById('realtimeState');
+    if (!stateEl) {
+        return;
+    }
+
+    stateEl.textContent = text;
+    stateEl.style.color = color || '#ffffff';
+}
+
+function markRealtimeSync(source) {
+    const syncEl = document.getElementById('realtimeLastSync');
+    if (!syncEl) {
+        return;
+    }
+
+    const now = new Date().toLocaleTimeString();
+    syncEl.textContent = 'Last sync (' + source + '): ' + now;
 }
 
 function formatMessageTime(timestamp) {
@@ -4121,6 +4274,8 @@ function createChatItem(chat, currentUser) {
 
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
+    initRealtimeBadge();
+    updateRealtimeBadge('WS connecting...', '#2f6fed');
     loadTheme();
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);

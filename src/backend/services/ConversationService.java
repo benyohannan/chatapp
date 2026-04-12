@@ -10,6 +10,7 @@ import com.mongodb.client.FindIterable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class ConversationService {
 
@@ -100,17 +101,20 @@ public class ConversationService {
     /**
      * Save a new message to the database
      */
-    public void saveMessage(String conversationId, String sender, String receiver, String message) {
+    public String saveMessage(String conversationId, String sender, String receiver, String message, String clientMessageId) {
         MongoDatabase db = MongoConnection.getDatabase();
         MongoCollection<Document> messages = db.getCollection("messages");
         MongoCollection<Document> conversations = db.getCollection("conversations");
 
         // Save the message
+        ObjectId messageObjectId = new ObjectId();
         Document messageDoc = new Document()
+            .append("_id", messageObjectId)
             .append("conversationId", conversationId)
             .append("sender", sender)
             .append("receiver", receiver)
             .append("message", message)
+            .append("clientMessageId", clientMessageId)
             .append("timestamp", LocalDateTime.now().toString())
             .append("isRead", false);
 
@@ -128,6 +132,8 @@ public class ConversationService {
             .append("lastMessageTime", LocalDateTime.now().toString()));
 
         conversations.updateOne(updateQuery, updateData);
+
+        return messageObjectId.toHexString();
     }
 
     /**

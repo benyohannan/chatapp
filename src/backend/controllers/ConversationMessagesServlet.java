@@ -58,6 +58,7 @@ public class ConversationMessagesServlet extends HttpServlet {
                 String sender = msg.getString("sender") != null ? msg.getString("sender") : "";
                 String receiver = msg.getString("receiver") != null ? msg.getString("receiver") : "";
                 String message = msg.getString("message") != null ? msg.getString("message") : "";
+                String clientMessageId = msg.getString("clientMessageId") != null ? msg.getString("clientMessageId") : "";
                 String timestamp = msg.getString("timestamp") != null ? msg.getString("timestamp") : "";
 
                 json.append("{")
@@ -65,6 +66,7 @@ public class ConversationMessagesServlet extends HttpServlet {
                     .append("\"sender\":\"").append(escapeJson(sender)).append("\",")
                     .append("\"receiver\":\"").append(escapeJson(receiver)).append("\",")
                     .append("\"message\":\"").append(escapeJson(message)).append("\",")
+                    .append("\"clientMessageId\":\"").append(escapeJson(clientMessageId)).append("\",")
                     .append("\"timestamp\":\"").append(escapeJson(timestamp)).append("\"")
                     .append("}");
 

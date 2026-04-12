@@ -51,6 +51,8 @@ public class ChatWebSocketEndpoint {
             String receiver = jsonValue(message, "receiver");
             String text = jsonValue(message, "message");
             String timestamp = jsonValue(message, "timestamp");
+            String messageId = jsonValue(message, "messageId");
+            String clientMessageId = jsonValue(message, "clientMessageId");
 
             if (sender == null || receiver == null || text == null) {
                 return;
@@ -61,6 +63,8 @@ public class ChatWebSocketEndpoint {
                 + "\"sender\":\"" + escapeJson(sender) + "\"," 
                 + "\"receiver\":\"" + escapeJson(receiver) + "\"," 
                 + "\"message\":\"" + escapeJson(text) + "\"," 
+                + "\"messageId\":\"" + escapeJson(messageId == null ? "" : messageId) + "\"," 
+                + "\"clientMessageId\":\"" + escapeJson(clientMessageId == null ? "" : clientMessageId) + "\"," 
                 + "\"timestamp\":\"" + escapeJson(timestamp == null ? "" : timestamp) + "\""
                 + "}";
 
