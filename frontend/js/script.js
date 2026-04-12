@@ -4219,21 +4219,40 @@ function createChatItem(chat, currentUser) {
     const chatItem = document.createElement('div');
     chatItem.className = 'chat-item';
     
-    const displayName = chat.username;
+    const displayName = chat.name || chat.username; // Support both new and old formats
+    const isGroupRoom = chat.isGroupRoom || false;
     const initials = displayName.substring(0, 2).toUpperCase();
     const lastMessage = chat.lastMessage || "No messages yet";
     
     chatItem.innerHTML = `
         <div class="chat-avatar">${initials}</div>
         <div class="chat-info">
-            <div class="chat-name">${displayName}</div>
+            <div class="chat-name">${isGroupRoom ? '🏠 ' : ''}${displayName}</div>
             <div class="chat-preview">
                 <div class="last-message">${lastMessage.substring(0, 30)}${lastMessage.length > 30 ? '...' : ''}</div>
             </div>
         </div>
     `;
     
-    chatItem.onclick = () => openChat(displayName, chat.conversationId);
+    // Click handler - open group room or user chat
+    chatItem.onclick = () => {
+        if (isGroupRoom) {
+            // Open group chat modal and navigate to the room
+            showGroupChatModal();
+            setTimeout(() => {
+                const roomItems = document.querySelectorAll('#groupChatContainer [data-room-name]');
+                for (let item of roomItems) {
+                    if (item.getAttribute('data-room-name') === displayName) {
+                        item.click();
+                        break;
+                    }
+                }
+            }, 100);
+        } else {
+            openChat(displayName, chat.conversationId);
+        }
+    };
+    
     return chatItem;
 }
 

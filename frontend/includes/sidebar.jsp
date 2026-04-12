@@ -72,16 +72,33 @@
                         data.forEach(chat => {
                             const chatItem = document.createElement("div");
                             chatItem.className = "chat-item";
-                            const otherParticipant = (chat.username && chat.username.trim()) ? chat.username.trim() : "Unknown";
-                            const avatar = otherParticipant.charAt(0).toUpperCase();
+                            const chatName = (chat.name && chat.name.trim()) ? chat.name.trim() : "Unknown";
+                            const avatar = chatName.charAt(0).toUpperCase();
                             const lastMessage = chat.lastMessage || "No messages yet";
+                            const isGroupRoom = chat.isGroupRoom || false;
 
-                            chatItem.onclick = () => openChat(otherParticipant);
+                            // Click handler - open group room or user chat
+                            chatItem.onclick = () => {
+                                if (isGroupRoom) {
+                                    showGroupChatModal();
+                                    // Find and click the room to open it
+                                    setTimeout(() => {
+                                        const roomItems = document.querySelectorAll('#groupChatContainer [data-room-name]');
+                                        roomItems.forEach(item => {
+                                            if (item.getAttribute('data-room-name') === chatName) {
+                                                item.click();
+                                            }
+                                        });
+                                    }, 100);
+                                } else {
+                                    openChat(chatName);
+                                }
+                            };
 
                             chatItem.innerHTML =
                                 '<div class="chat-avatar">' + avatar + '</div>' +
                                 '<div class="chat-info">' +
-                                    '<div class="chat-name">' + otherParticipant + '</div>' +
+                                    '<div class="chat-name">' + (isGroupRoom ? '🏠 ' : '') + chatName + '</div>' +
                                     '<div class="chat-preview">' +
                                         '<div class="last-message">' + lastMessage + '</div>' +
                                     '</div>' +
