@@ -3899,7 +3899,6 @@ function initChatSocket() {
 
     chatSocket.addEventListener('open', () => {
         isChatSocketReady = true;
-        updateRealtimeBadge('WS connected', '#1f8b4c');
         console.log('Chat socket connected for', currentUser);
         if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
             const authPayload = {
@@ -3955,7 +3954,6 @@ function initChatSocket() {
     chatSocket.addEventListener('close', () => {
         isChatSocketReady = false;
         chatSocket = null;
-        updateRealtimeBadge('WS disconnected (fallback active)', '#b45f06');
         console.warn('Chat socket disconnected, fallback sync remains active');
         setTimeout(() => {
             initChatSocket();
@@ -3964,7 +3962,6 @@ function initChatSocket() {
 
     chatSocket.addEventListener('error', (err) => {
         isChatSocketReady = false;
-        updateRealtimeBadge('WS error (fallback active)', '#a61b29');
         console.error('WebSocket error:', err);
     });
 }
@@ -4089,47 +4086,15 @@ function appendConversationMessage(conversationUser, messageData, isSent, animat
 }
 
 function initRealtimeBadge() {
-    if (realtimeBadge || !document.body) {
-        return;
-    }
-
-    realtimeBadge = document.createElement('div');
-    realtimeBadge.id = 'realtimeStatusBadge';
-    realtimeBadge.style.position = 'fixed';
-    realtimeBadge.style.right = '12px';
-    realtimeBadge.style.bottom = '12px';
-    realtimeBadge.style.zIndex = '9999';
-    realtimeBadge.style.padding = '8px 10px';
-    realtimeBadge.style.borderRadius = '8px';
-    realtimeBadge.style.fontSize = '11px';
-    realtimeBadge.style.lineHeight = '1.35';
-    realtimeBadge.style.color = '#fff';
-    realtimeBadge.style.background = 'rgba(18, 18, 18, 0.88)';
-    realtimeBadge.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.25)';
-    realtimeBadge.style.maxWidth = '210px';
-    realtimeBadge.innerHTML = '<div id="realtimeState">WS connecting...</div><div id="realtimeLastSync">Last sync: -</div>';
-
-    document.body.appendChild(realtimeBadge);
+    return;
 }
 
 function updateRealtimeBadge(text, color) {
-    const stateEl = document.getElementById('realtimeState');
-    if (!stateEl) {
-        return;
-    }
-
-    stateEl.textContent = text;
-    stateEl.style.color = color || '#ffffff';
+    return;
 }
 
 function markRealtimeSync(source) {
-    const syncEl = document.getElementById('realtimeLastSync');
-    if (!syncEl) {
-        return;
-    }
-
-    const now = new Date().toLocaleTimeString();
-    syncEl.textContent = 'Last sync (' + source + '): ' + now;
+    return;
 }
 
 function formatMessageTime(timestamp) {
@@ -4274,8 +4239,6 @@ function createChatItem(chat, currentUser) {
 
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
-    initRealtimeBadge();
-    updateRealtimeBadge('WS connecting...', '#2f6fed');
     loadTheme();
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);
