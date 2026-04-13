@@ -1,5 +1,4 @@
 
-
         <!-- Main Chat Area -->
         <div class="main-chat" id="mainChat">
             <!-- Welcome Screen (shown when no chat is selected) -->
@@ -85,79 +84,6 @@
 
                 <!-- Chat Messages -->
                 <div class="chat-messages" id="chatMessages">
-                    <div class="message received" data-message-id="1">
-                        <div class="message-bubble">
-                            <div class="message-content">Hey! How are you doing today? 😊</div>
-                            <div class="message-time">2:30 PM</div>
-                         <div class="message-actions">
-                            <div class="message-actions-btn">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                         </div>
-                        </div>
-                       
-                    </div>
-
-                    <div class="message sent" data-message-id="2">
-                        <div class="message-actions">
-                            <div class="message-actions-btn">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                        <div class="message-bubble">
-                            <div class="message-content">I'm doing great! Just working on some new projects. How about you?</div>
-                            <div class="message-time">
-                                2:32 PM
-                                <i class="fas fa-check-double message-status"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="message received" data-message-id="3">
-                        <div class="message-bubble">
-                            <div class="message-content">That sounds awesome! I'd love to hear more about your projects sometime. 🚀</div>
-                            <div class="message-time">2:33 PM</div>
-                            <div class="message-reactions">
-                                <div class="reaction">
-                                    <span class="reaction-emoji">👍</span>
-                                    <span class="reaction-count">1</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="message-actions">
-                            <div class="message-actions-btn">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="message sent" data-message-id="4">
-                        <div class="message-actions">
-                            <div class="message-actions-btn">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                        <div class="message-bubble">
-                            <div class="message-content">Let's catch up over coffee this weekend? ☕</div>
-                            <div class="message-time">
-                                2:35 PM
-                                <i class="fas fa-check-double message-status"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="message received" data-message-id="5">
-                        <div class="message-bubble">
-                            <div class="message-content">Perfect! Saturday works for me. Looking forward to it! 🎉</div>
-                            <div class="message-time">2:36 PM</div>
-                        </div>
-                        <div class="message-actions">
-                            <div class="message-actions-btn">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Typing Indicator -->
                     <div class="typing-indicator" id="typingIndicator" style="display: none;">
                         <span class="typing-text">typing</span>
@@ -181,66 +107,10 @@
                     <div class="message-input-wrapper">
                         <input type="text" class="message-input" placeholder="Type a message" id="messageInput">
                     </div>
-                    <button class="send-btn" id="sendBtn">
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
             </div>
         </div>
     </div>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        function openChat(userName) {
-    const isMobile = window.innerWidth < 768;
-
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    const welcomeScreen = document.getElementById('welcomeScreen');
-    const chatInterface = document.getElementById('chatInterface');
-
-    // ✅ SHOW CHAT UI
-    welcomeScreen.style.display = "none";
-    chatInterface.style.display = "flex";
-
-    // ✅ Update chat name
-    chatNameElement.innerText = userName;
-
-    // ✅ Load messages (dummy for now)
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hello, this is ${userName}'s chat!</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-        <div class="message sent">
-            <div class="message-bubble">
-                <div class="message-content">Hi ${userName}, how can I help you?</div>
-                <div class="message-time">2:32 PM</div>
-            </div>
-        </div>
-    `;
-
-    // ✅ Mobile view handling
-    if (isMobile) {
-    sidebarElement.classList.add('hide');
-    mainChatElement.classList.add('show');
-}
-}
-document.getElementById("backBtn").addEventListener("click", () => {
-    const sidebar = document.getElementById('sidebar');
-    const mainChat = document.getElementById('mainChat');
-
-    // ✅ reverse animation
-    sidebar.classList.remove("hide");
-    mainChat.classList.remove("show");
-});
-
-        // Expose functions globally for testing
-        window.openChat = openChat;
-        window.showSidebar = showSidebar;
-    });
-</script>

@@ -52,4 +52,24 @@ public class MongoConnection {
         }
         return null;
     }
+
+    public User findUserByUsernameOrEmail(String identifier) {
+        MongoCollection<Document> users = getDatabase().getCollection("users");
+        Document query = new Document("$or", java.util.List.of(
+                new Document("username", identifier),
+                new Document("email", identifier)
+        ));
+        Document result = users.find(query).first();
+
+        if (result != null) {
+            return new User(
+                    result.getString("firstName"),
+                    result.getString("lastName"),
+                    result.getString("username"),
+                    result.getString("email"),
+                    result.getString("password")
+            );
+        }
+        return null;
+    }
 }

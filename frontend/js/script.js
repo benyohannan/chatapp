@@ -158,6 +158,15 @@ let isSpeakerOn = false;
 let isCameraOn = false;
 let isIncomingCall = false;
 let currentCallType = 'audio';
+let activeChatUser = null;
+let chatSocket = null;
+let isChatSocketReady = false;
+let activeChatSyncTimer = null;
+let isConversationFetchInFlight = false;
+let realtimeBadge = null;
+let displayedConversationUser = null;
+let renderedMessageKeysByConversation = {};
+let recentNotificationKeys = new Map();
 
 // User settings data
 let userSettings = {
@@ -1134,6 +1143,44 @@ function showNotification(message, type = 'info') {
         notification.remove();
     }, 3000);
 }
+window.showNotification = showNotification;
+
+function cleanupRecentNotificationKeys() {
+    const now = Date.now();
+    recentNotificationKeys.forEach((timestamp, key) => {
+        if (now - timestamp > 12000) {
+            recentNotificationKeys.delete(key);
+        }
+    });
+}
+
+function notifyIncomingMessage(title, message, category = 'direct', dedupeKey = '') {
+    const notifications = userSettings && userSettings.notifications ? userSettings.notifications : {};
+    const isEnabled = category === 'group'
+        ? notifications.groupNotifications !== false
+        : notifications.messageNotifications !== false;
+
+    if (!isEnabled) {
+        return;
+    }
+
+    const safeTitle = title || (category === 'group' ? 'New group message' : 'New message');
+    const safeMessage = String(message || '').trim() || 'You received a new message.';
+    const preview = safeMessage.length > 70 ? safeMessage.slice(0, 67) + '...' : safeMessage;
+    const safeKey = String(dedupeKey || '').trim();
+
+    cleanupRecentNotificationKeys();
+    if (safeKey && recentNotificationKeys.has(safeKey)) {
+        return;
+    }
+    if (safeKey) {
+        recentNotificationKeys.set(safeKey, Date.now());
+    }
+
+    showNotification(safeTitle + ': ' + preview);
+}
+
+window.notifyIncomingMessage = notifyIncomingMessage;
 
 // Modal functions
 function showModal(modalElement) {
@@ -2759,26 +2806,45 @@ function showEmptyChatState() {
 }
 
 function closeChat() {
-    showModal(closeChatModal);
+    stopActiveChatSync();
+    showRecentChatsPanel();
+    showNotification('Chat closed');
 }
 
-function confirmCloseChat() {
-    closeChatSearch();
-    closeReplyBar();
-    
-    chatInterface.style.display = 'none';
-    welcomeScreen.style.display = 'flex';
-    
+function resetActiveChatSelection() {
+    activeChatUser = null;
+    displayedConversationUser = null;
+
     document.querySelectorAll('.chat-item').forEach(item => {
         item.classList.remove('active');
     });
+}
 
-    if (isMobileDevice()) {
-        sidebar.classList.remove('hide');
-        mainChat.classList.remove('show');
+function showRecentChatsPanel() {
+    closeChatSearch();
+    closeReplyBar();
+    stopActiveChatSync();
+
+    resetActiveChatSelection();
+
+    if (chatInterface && welcomeScreen) {
+        chatInterface.style.display = 'none';
+        welcomeScreen.style.display = 'flex';
     }
 
-    hideModal(closeChatModal);
+    if (sidebar && mainChat) {
+        sidebar.classList.remove('hide');
+        mainChat.classList.remove('show');
+        mainChat.classList.add('collapsed');
+        sidebar.classList.add('expanded');
+    }
+}
+
+function confirmCloseChat() {
+    showRecentChatsPanel();
+    if (closeChatModal) {
+        hideModal(closeChatModal);
+    }
     showNotification('Chat closed');
 }
 
@@ -3163,8 +3229,15 @@ function handleMessageActionClick(e) {
             selectedMessage = messageElement;
             const rect = e.target.closest('.message-actions-btn').getBoundingClientRect();
             const isSentMessage = messageElement.classList.contains('sent');
+            const editOption = document.getElementById('editOption');
+            const deleteOption = document.getElementById('deleteOption');
             
-            document.getElementById('editOption').style.display = isSentMessage ? 'block' : 'none';
+            if (editOption) {
+                editOption.style.display = isSentMessage ? 'flex' : 'none';
+            }
+            if (deleteOption) {
+                deleteOption.style.display = isSentMessage ? 'flex' : 'none';
+            }
             
             contextMenu.style.display = 'block';
             contextMenu.style.left = (rect.left - 75) + 'px';
@@ -3204,7 +3277,10 @@ function handleReply() {
 function handleEdit() {
     if (selectedMessage && selectedMessage.classList.contains('sent')) {
         const messageContent = selectedMessage.querySelector('.message-content');
-        const originalText = messageContent.textContent;
+        const originalText = messageContent.textContent.replace(/edited\s*$/, '').trim();
+        const messageId = selectedMessage.dataset.messageId;
+        const otherUser = activeChatUser;
+        const currentUser = getLoggedInUsername();
         
         selectedMessage.classList.add('editing');
         
@@ -3230,9 +3306,39 @@ function handleEdit() {
         saveBtn.addEventListener('click', () => {
             const newText = editInput.value.trim();
             if (newText && newText !== originalText) {
-                messageContent.innerHTML = newText + '<span class="edited-label">edited</span>';
-                updateMessageInData(selectedMessage.dataset.messageId, newText);
-                showNotification('Message edited');
+                if (!messageId || !otherUser || !currentUser) {
+                    showNotification('Unable to edit message');
+                    finishEditing();
+                    return;
+                }
+
+                fetch('/chatapp/edit-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: 'currentUser=' + encodeURIComponent(currentUser)
+                        + '&otherUser=' + encodeURIComponent(otherUser)
+                        + '&messageId=' + encodeURIComponent(messageId)
+                        + '&message=' + encodeURIComponent(newText)
+                })
+                    .then(response => response.json().then(body => ({ status: response.status, body: body })))
+                    .then(result => {
+                        if (result.status >= 400 || !result.body || result.body.success !== true) {
+                            throw new Error(result.body && result.body.error ? result.body.error : 'Unable to edit message');
+                        }
+
+                        updateMessageElementContent(selectedMessage, newText, true);
+                        updateMessageInData(messageId, newText);
+                        loadRecentChats();
+                        showNotification('Message edited');
+                    })
+                    .catch(error => {
+                        console.error('Error editing message:', error);
+                        showNotification(error.message || 'Unable to edit message');
+                    })
+                    .finally(finishEditing);
+                return;
             }
             finishEditing();
         });
@@ -3267,22 +3373,59 @@ function handleCopy() {
 }
 
 function handleDelete() {
-    if (selectedMessage) {
-        const messageId = selectedMessage.dataset.messageId;
-        selectedMessage.style.animation = 'messageSlide 0.3s ease-out reverse';
-        
-        setTimeout(() => {
-            selectedMessage.remove();
-            removeMessageFromData(messageId);
-            showNotification('Message deleted');
-            
-            const remainingMessages = chatMessages.querySelectorAll('.message');
-            if (remainingMessages.length === 0) {
-                showEmptyChatState();
-            }
-        }, 300);
+    if (!selectedMessage) {
+        if (contextMenu) contextMenu.style.display = 'none';
+        return;
     }
-    contextMenu.style.display = 'none';
+
+    const messageElement = selectedMessage;
+    const messageId = messageElement.dataset.messageId;
+    const messageKey = messageElement.dataset.messageKey || messageId;
+    const otherUser = activeChatUser;
+    const currentUser = getLoggedInUsername();
+
+    if (contextMenu) {
+        contextMenu.style.display = 'none';
+    }
+
+    if (!messageId || !otherUser || !currentUser) {
+        showNotification('Unable to delete message');
+        return;
+    }
+
+    fetch('/chatapp/delete-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'currentUser=' + encodeURIComponent(currentUser)
+            + '&otherUser=' + encodeURIComponent(otherUser)
+            + '&messageId=' + encodeURIComponent(messageId)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to delete message');
+            }
+
+            messageElement.style.animation = 'messageSlide 0.3s ease-out reverse';
+            setTimeout(() => {
+                messageElement.remove();
+                removeMessageFromData(messageId);
+                removeRenderedConversationMessage(otherUser, messageKey);
+                loadRecentChats();
+                showNotification('Message deleted');
+
+                const remainingMessages = chatMessages.querySelectorAll('.message');
+                if (remainingMessages.length === 0) {
+                    showEmptyChatState();
+                }
+            }, 300);
+        })
+        .catch(error => {
+            console.error('Error deleting message:', error);
+            showNotification(error.message || 'Unable to delete message');
+        });
 }
 
 // Reply bar functions
@@ -3370,8 +3513,8 @@ function getFileIcon(fileType) {
 // Data management functions
 function updateMessageInData(messageId, newContent) {
     const currentChatName = chatName.textContent;
-    const messages = currentChatData.messages[currentChatName];
-    const message = messages.find(msg => msg.id == messageId);
+    const messages = currentChatData.messages[currentChatName] || [];
+    const message = messages.find(msg => msg.id == messageId || msg.clientMessageId == messageId);
     if (message) {
         message.content = newContent;
         message.edited = true;
@@ -3380,11 +3523,54 @@ function updateMessageInData(messageId, newContent) {
 
 function removeMessageFromData(messageId) {
     const currentChatName = chatName.textContent;
-    const messages = currentChatData.messages[currentChatName];
-    const index = messages.findIndex(msg => msg.id == messageId);
+    const messages = currentChatData.messages[currentChatName] || [];
+    const index = messages.findIndex(msg => msg.id == messageId || msg.clientMessageId == messageId);
     if (index > -1) {
         messages.splice(index, 1);
     }
+}
+
+function getConversationMessageKey(message) {
+    if (!message) {
+        return '';
+    }
+
+    if (message.messageId) {
+        return 'server:' + message.messageId;
+    }
+
+    if (message.id) {
+        return String(message.id).indexOf('cmid-') === 0 ? 'client:' + message.id : 'server:' + message.id;
+    }
+
+    if (message.clientMessageId) {
+        return 'client:' + message.clientMessageId;
+    }
+
+    return 'sig:' + [message.sender || '', message.receiver || '', message.timestamp || '', message.message || ''].join('|');
+}
+
+function getConversationRenderedSet(userName) {
+    if (!renderedMessageKeysByConversation[userName]) {
+        renderedMessageKeysByConversation[userName] = new Set();
+    }
+    return renderedMessageKeysByConversation[userName];
+}
+
+function resetConversationRenderState(userName) {
+    renderedMessageKeysByConversation[userName] = new Set();
+}
+
+function isConversationMessageRendered(userName, messageKey) {
+    return getConversationRenderedSet(userName).has(messageKey);
+}
+
+function markConversationMessageRendered(userName, messageKey) {
+    getConversationRenderedSet(userName).add(messageKey);
+}
+
+function removeRenderedConversationMessage(userName, messageKey) {
+    getConversationRenderedSet(userName).delete(messageKey);
 }
 
 function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
@@ -3397,7 +3583,9 @@ function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
         id: messageId,
         type: isSent ? 'sent' : 'received',
         content: content,
-        time: time
+        time: time,
+        clientMessageId: typeof messageId === 'string' && messageId.indexOf('cmid-') === 0 ? messageId : '',
+        edited: false
     };
     
     if (replyTo) {
@@ -3405,6 +3593,106 @@ function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
     }
     
     currentChatData.messages[currentChatName].push(messageData);
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function buildMessageContentHtml(text, edited) {
+    return escapeHtml(text) + (edited ? '<span class="edited-label">edited</span>' : '');
+}
+
+function updateMessageElementContent(messageElement, text, edited) {
+    if (!messageElement) {
+        return;
+    }
+
+    const contentElement = messageElement.querySelector('.message-content');
+    if (contentElement) {
+        contentElement.innerHTML = buildMessageContentHtml(text, edited);
+    }
+}
+
+function replaceRenderedConversationKey(userName, oldKey, newKey) {
+    if (!userName || !oldKey || !newKey || oldKey === newKey) {
+        return;
+    }
+
+    removeRenderedConversationMessage(userName, oldKey);
+    markConversationMessageRendered(userName, newKey);
+}
+
+function reconcileOptimisticMessage(clientMessageId, serverMessageId) {
+    if (!clientMessageId || !serverMessageId) {
+        return;
+    }
+
+    const clientKey = 'client:' + clientMessageId;
+    const serverKey = 'server:' + serverMessageId;
+    const messageElement = chatMessages
+        ? chatMessages.querySelector('[data-message-id="' + clientMessageId + '"], [data-message-key="' + clientKey + '"]')
+        : null;
+
+    if (messageElement) {
+        messageElement.setAttribute('data-message-id', serverMessageId);
+        messageElement.setAttribute('data-message-key', serverKey);
+    }
+
+    const currentChatName = chatName && chatName.textContent ? chatName.textContent : '';
+    const messages = currentChatData.messages[currentChatName] || [];
+    const message = messages.find(msg => msg.id == clientMessageId || msg.clientMessageId == clientMessageId);
+    if (message) {
+        message.id = serverMessageId;
+        message.clientMessageId = clientMessageId;
+    }
+
+    replaceRenderedConversationKey(activeChatUser, clientKey, serverKey);
+}
+
+function findMessageElementByServerId(messageId) {
+    if (!chatMessages || !messageId) {
+        return null;
+    }
+    return chatMessages.querySelector('[data-message-id="' + messageId + '"], [data-message-key="server:' + messageId + '"]');
+}
+
+function applyIncomingMessageEdit(messageId, newText) {
+    if (!messageId) {
+        return;
+    }
+
+    const messageElement = findMessageElementByServerId(messageId);
+    if (messageElement) {
+        updateMessageElementContent(messageElement, newText, true);
+    }
+
+    updateMessageInData(messageId, newText);
+    loadRecentChats();
+}
+
+function applyIncomingMessageDelete(messageId) {
+    if (!messageId) {
+        return;
+    }
+
+    const messageElement = findMessageElementByServerId(messageId);
+    if (messageElement) {
+        messageElement.remove();
+    }
+
+    removeMessageFromData(messageId);
+    removeRenderedConversationMessage(activeChatUser, 'server:' + messageId);
+    loadRecentChats();
+
+    if (chatMessages && chatMessages.querySelectorAll('.message').length === 0) {
+        showEmptyChatState();
+    }
 }
 
 // Handle chat item click
@@ -3419,32 +3707,69 @@ function handleChatClick(element) {
     }
 }
 
+function hideGroupChatOverlay() {
+    const container = document.getElementById('groupChatContainer');
+    if (!container || container.style.display === 'none') {
+        return;
+    }
+
+    if (typeof hideGroupChatModal === 'function') {
+        hideGroupChatModal();
+        return;
+    }
+
+    container.style.display = 'none';
+}
+
 // Open chat function
 // Handle chat item click to toggle between chat list and messages on mobile
 function openChat(userName) {
-
-    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    // Update chat details
-    chatNameElement.innerText = userName;
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hey! How are you doing today? 😊</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-    `;
-
-    if (isMobile) {
-        // Hide sidebar and show main chat on mobile
-        sidebarElement.classList.add('d-none');
-        mainChatElement.classList.add('active');
+    if (!userName) {
+        return;
     }
+
+    hideGroupChatOverlay();
+
+    activeChatUser = userName;
+    displayedConversationUser = userName;
+
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Tap to chat';
+    }
+    if (chatAvatar) {
+        chatAvatar.innerText = userName.substring(0, 2).toUpperCase();
+    }
+
+    if (welcomeScreen && chatInterface) {
+        welcomeScreen.style.display = 'none';
+        chatInterface.style.display = 'flex';
+    }
+
+    if (mainChat) {
+        mainChat.classList.remove('collapsed');
+    }
+    if (sidebar) {
+        sidebar.classList.remove('expanded');
+    }
+
+    if (isMobileDevice()) {
+        if (sidebar) sidebar.classList.add('hide');
+        if (mainChat) mainChat.classList.add('show');
+    }
+
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const nameElement = item.querySelector('.chat-name');
+        item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
+    });
+
+    markConversationRead(userName).finally(() => {
+        loadRecentChats();
+    });
+    loadConversationMessages(userName, true);
+    startActiveChatSync();
 }
 
 // Handle back button click to return to chat list on mobile
@@ -3471,6 +3796,7 @@ function loadChatMessages(chatName) {
         messages_data.forEach(msg => {
             addMessageToChat(msg.content, msg.type === 'sent', msg.time, false, msg.id, msg.replyTo);
         });
+        
     } else {
         showEmptyChatState();
     }
@@ -3478,22 +3804,41 @@ function loadChatMessages(chatName) {
 
 // Go back to chats
 function goBackToChats() {
-    if (isMobileDevice()) {
-        sidebar.classList.remove('hide');
-        mainChat.classList.remove('show');
-        
-        setTimeout(() => {
-            chatInterface.style.display = 'none';
-            welcomeScreen.style.display = 'flex';
-        }, 300);
-        
-        closeChatSearch();
-        closeReplyBar();
+    if (!isMobileDevice()) {
+        showRecentChatsPanel();
+        return;
+    }
+
+    sidebar.classList.remove('hide');
+    mainChat.classList.remove('show');
+
+    setTimeout(() => {
+        showRecentChatsPanel();
+    }, 300);
+
+    if (chatDropdownMenu) {
         chatDropdownMenu.classList.remove('show');
-        
-        document.querySelectorAll('.chat-item').forEach(item => {
-            item.classList.remove('active');
-        });
+    }
+}
+
+function startActiveChatSync() {
+    stopActiveChatSync();
+
+    if (!activeChatUser) {
+        return;
+    }
+
+    activeChatSyncTimer = setInterval(() => {
+        if (activeChatUser) {
+            loadConversationMessages(activeChatUser, false);
+        }
+    }, 2000);
+}
+
+function stopActiveChatSync() {
+    if (activeChatSyncTimer) {
+        clearInterval(activeChatSyncTimer);
+        activeChatSyncTimer = null;
     }
 }
 
@@ -3671,11 +4016,12 @@ function addMessage(text, isSent = true) {
     }
 }
 
-function addMessageToChat(text, isSent, time, animate = true, messageId = null, replyTo = null) {
+function addMessageToChat(text, isSent, time, animate = true, messageId = null, replyTo = null, edited = false, messageKey = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     if (messageId) {
         messageDiv.setAttribute('data-message-id', messageId);
+        messageDiv.setAttribute('data-message-key', messageKey || messageId);
     }
     if (animate) {
         messageDiv.style.animation = 'messageSlide 0.3s ease-out';
@@ -3707,7 +4053,7 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
             <div class="message-bubble">
                 ${actionsHtml}
                 ${replyHtml}
-                <div class="message-content">${text}</div>
+                <div class="message-content">${buildMessageContentHtml(text, edited)}</div>
                 <div class="message-time">
                     ${time}
                     ${statusIcon}
@@ -3718,7 +4064,7 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
         messageDiv.innerHTML = `
             <div class="message-bubble">
                 ${replyHtml}
-                <div class="message-content">${text}</div>
+                <div class="message-content">${buildMessageContentHtml(text, edited)}</div>
                 <div class="message-time">${time}</div>
                  ${actionsHtml}
             </div>
@@ -3734,32 +4080,363 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
 
 function sendMessage() {
     const text = messageInput.value.trim();
-    if (text) {
-        addMessage(text, true);
-        messageInput.value = '';
-        
-        typingIndicator.style.display = 'flex';
-        
-        setTimeout(() => {
-            typingIndicator.style.display = 'none';
-            const responses = [
-                "That's interesting! Tell me more. 🤔",
-                "I completely agree with you! 👍",
-                "Thanks for sharing that with me. 😊",
-                "That sounds like a great idea! 💡",
-                "I'll definitely consider that. 🤝",
-                "Awesome! Let's do it! 🚀",
-                "Haha, that's funny! 😂",
-                "Sure thing! No problem. ✅",
-                "Interesting perspective! 🧠",
-                "I love that idea! ❤️",
-                "You're absolutely right! 💯",
-                "That makes perfect sense. 🎯"
-            ];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            addMessage(randomResponse, false);
-        }, Math.random() * 2000 + 1000);
+    const sender = getLoggedInUsername();
+
+    if (!text) {
+        return;
     }
+
+    if (!sender) {
+        showNotification('Login session missing. Please re-login.');
+        return;
+    }
+
+    if (!activeChatUser) {
+        showNotification('Select a chat user first.');
+        return;
+    }
+
+    const clientMessageId = 'cmid-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    const optimisticTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(text, true, optimisticTime, true, clientMessageId);
+    saveMessageToData(text, true, optimisticTime, clientMessageId);
+    markConversationMessageRendered(activeChatUser, 'client:' + clientMessageId);
+    messageInput.value = '';
+
+    fetch('/chatapp/send-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: 'sender=' + encodeURIComponent(sender)
+            + '&receiver=' + encodeURIComponent(activeChatUser)
+            + '&message=' + encodeURIComponent(text)
+            + '&clientMessageId=' + encodeURIComponent(clientMessageId)
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to send message (' + response.status + ')');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const serverMessageId = data.messageId || '';
+            if (serverMessageId) {
+                reconcileOptimisticMessage(clientMessageId, serverMessageId);
+                markConversationMessageRendered(activeChatUser, 'server:' + serverMessageId);
+            }
+
+            sendRealtimeMessage(sender, activeChatUser, text, data.timestamp, serverMessageId, clientMessageId);
+            loadRecentChats();
+        })
+        .catch(error => {
+            console.error('Error sending message:', error);
+            removeMessageFromData(clientMessageId);
+            removeRenderedConversationMessage(activeChatUser, 'client:' + clientMessageId);
+            const failedMessage = chatMessages.querySelector('[data-message-key="' + clientMessageId + '"]');
+            if (failedMessage) {
+                failedMessage.remove();
+            }
+            showNotification('Failed to send message');
+        });
+}
+
+function initChatSocket() {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING))) {
+        return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    chatSocket = new WebSocket(protocol + '//' + window.location.host + '/chatapp/ws/chat?username=' + encodeURIComponent(currentUser));
+
+    chatSocket.addEventListener('open', () => {
+        isChatSocketReady = true;
+        console.log('Chat socket connected for', currentUser);
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            const authPayload = {
+                type: 'auth',
+                username: currentUser
+            };
+            chatSocket.send(JSON.stringify(authPayload));
+        }
+    });
+
+    chatSocket.addEventListener('message', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (!data || !data.type) {
+                return;
+            }
+
+            markRealtimeSync('ws');
+
+            const loggedIn = getLoggedInUsername();
+            if (data.receiver !== loggedIn) {
+                return;
+            }
+
+            if (data.type === 'edit') {
+                if (activeChatUser === data.sender) {
+                    applyIncomingMessageEdit(data.messageId, data.message || '');
+                } else {
+                    loadRecentChats();
+                }
+                return;
+            }
+
+            if (data.type === 'delete') {
+                if (activeChatUser === data.sender) {
+                    applyIncomingMessageDelete(data.messageId);
+                } else {
+                    loadRecentChats();
+                }
+                return;
+            }
+
+            if (data.type !== 'chat') {
+                return;
+            }
+
+            const fromUser = data.sender;
+            const text = data.message || '';
+            const time = formatMessageTime(data.timestamp);
+            const notificationKey = ['direct', data.messageId || '', data.clientMessageId || '', fromUser, loggedIn, text, data.timestamp || ''].join('|');
+
+            const messageData = {
+                id: data.messageId || data.clientMessageId || data.timestamp || ('ws-' + Date.now()),
+                content: text,
+                time: time,
+                clientMessageId: data.clientMessageId || ''
+            };
+
+            if (!currentChatData.messages[fromUser]) {
+                currentChatData.messages[fromUser] = [];
+            }
+
+            if (activeChatUser === fromUser) {
+                const conversationKey = getConversationMessageKey(data);
+                appendConversationMessage(fromUser, messageData, false, true, conversationKey);
+                markConversationRead(fromUser).finally(() => {
+                    loadRecentChats();
+                });
+                notifyIncomingMessage(fromUser, text, 'direct', notificationKey);
+            } else {
+                saveMessageToData(text, false, time, messageData.id);
+                notifyIncomingMessage(fromUser, text, 'direct', notificationKey);
+                loadRecentChats();
+            }
+        } catch (err) {
+            console.error('WebSocket message parse error:', err);
+        }
+    });
+
+    chatSocket.addEventListener('close', () => {
+        isChatSocketReady = false;
+        chatSocket = null;
+        console.warn('Chat socket disconnected, fallback sync remains active');
+        setTimeout(() => {
+            initChatSocket();
+        }, 1500);
+    });
+
+    chatSocket.addEventListener('error', (err) => {
+        isChatSocketReady = false;
+        console.error('WebSocket error:', err);
+    });
+}
+
+window.addEventListener('focus', () => {
+    if (activeChatUser) {
+        loadConversationMessages(activeChatUser);
+    }
+});
+
+function sendRealtimeMessage(sender, receiver, message, timestamp, messageId, clientMessageId) {
+    if (!isChatSocketReady || !chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    const payload = {
+        type: 'chat',
+        sender: sender,
+        receiver: receiver,
+        message: message,
+        timestamp: timestamp || new Date().toISOString(),
+        messageId: messageId || '',
+        clientMessageId: clientMessageId || ''
+    };
+
+    chatSocket.send(JSON.stringify(payload));
+}
+
+function loadConversationMessages(otherUser, replaceAll = false) {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || !otherUser || !chatMessages) {
+        return;
+    }
+
+    if (isConversationFetchInFlight) {
+        return;
+    }
+
+    isConversationFetchInFlight = true;
+
+    const requestUrl = '/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser)
+        + '&otherUser=' + encodeURIComponent(otherUser)
+        + '&_ts=' + Date.now();
+
+    fetch(requestUrl, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load messages');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const messages = Array.isArray(data.messages) ? data.messages : [];
+
+            if (replaceAll || displayedConversationUser !== otherUser) {
+                currentChatData.messages[otherUser] = [];
+                resetConversationRenderState(otherUser);
+
+                const existing = chatMessages.querySelectorAll('.message, .empty-chat');
+                existing.forEach(item => item.remove());
+            }
+
+            if (messages.length === 0) {
+                showEmptyChatState();
+                return;
+            }
+
+            messages.forEach(msg => {
+                const messageKey = getConversationMessageKey(msg);
+                if (isConversationMessageRendered(otherUser, messageKey)) {
+                    return;
+                }
+
+                const isSent = msg.sender === currentUser;
+                const time = formatMessageTime(msg.timestamp);
+                const messageData = {
+                    id: msg.id || msg.messageId || msg.clientMessageId || messageKey,
+                    content: msg.message || '',
+                    time: time,
+                    type: isSent ? 'sent' : 'received',
+                    replyTo: msg.replyTo || null,
+                    clientMessageId: msg.clientMessageId || '',
+                    edited: Boolean(msg.edited)
+                };
+
+                appendConversationMessage(otherUser, messageData, isSent, false, messageKey);
+
+                if (!replaceAll && !isSent) {
+                    const notificationKey = [
+                        'direct',
+                        msg.id || msg.messageId || '',
+                        msg.clientMessageId || '',
+                        msg.sender || '',
+                        currentUser,
+                        msg.message || '',
+                        msg.timestamp || ''
+                    ].join('|');
+                    notifyIncomingMessage(otherUser, msg.message || '', 'direct', notificationKey);
+                }
+            });
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            markRealtimeSync('poll');
+        })
+        .catch(error => {
+            console.error('Error loading conversation messages:', error);
+            showEmptyChatState();
+        })
+        .finally(() => {
+            isConversationFetchInFlight = false;
+        });
+}
+
+function appendConversationMessage(conversationUser, messageData, isSent, animate, messageKey) {
+    const key = messageKey || getConversationMessageKey(messageData);
+
+    if (isConversationMessageRendered(conversationUser, key)) {
+        return false;
+    }
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(
+        messageData.content,
+        isSent,
+        messageData.time,
+        animate,
+        messageData.id || key,
+        messageData.replyTo,
+        Boolean(messageData.edited),
+        key
+    );
+    saveMessageToData(messageData.content, isSent, messageData.time, messageData.id || key, messageData.replyTo);
+    if (Boolean(messageData.edited)) {
+        updateMessageInData(messageData.id || key, messageData.content);
+    }
+    markConversationMessageRendered(conversationUser, key);
+    return true;
+}
+
+function markConversationRead(otherUser) {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || !otherUser) {
+        return Promise.resolve();
+    }
+
+    return fetch('/chatapp/mark-conversation-read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: 'currentUser=' + encodeURIComponent(currentUser)
+            + '&otherUser=' + encodeURIComponent(otherUser)
+    }).catch(error => {
+        console.error('Error marking conversation as read:', error);
+    });
+}
+
+function initRealtimeBadge() {
+    return;
+}
+
+function updateRealtimeBadge(text, color) {
+    return;
+}
+
+function markRealtimeSync(source) {
+    return;
+}
+
+function formatMessageTime(timestamp) {
+    if (!timestamp) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // Handle window resize
@@ -3802,12 +4479,109 @@ if (chatMessages) {
     }, { passive: true });
 }
 
+// Function to load recent chats dynamically
+function loadRecentChats() {
+    const username = getLoggedInUsername(); // Get username from session or localStorage
+    
+    if (!username) {
+        console.warn("No username found. Recent chats not loaded.");
+        return;
+    }
+
+    fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}`)
+        .then(response => response.json())
+        .then(data => {
+            const chatList = document.getElementById('chatList');
+            if (!chatList) return;
+
+            chatList.innerHTML = '';
+
+            if (data.length === 0) {
+                // Show message when no recent chats
+                chatList.innerHTML = `
+                    <div class="no-chats-message">
+                        <div class="no-chats-icon">💬</div>
+                        <p>No recent chats</p>
+                        <p class="tap-to-chat">Tap to start a new chat</p>
+                    </div>
+                `;
+            } else {
+                // Populate recent chats
+                data.forEach(chat => {
+                    const chatItem = createChatItem(chat, username);
+                    chatList.appendChild(chatItem);
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching recent chats:", error);
+            const chatList = document.getElementById('chatList');
+            if (chatList) {
+                chatList.innerHTML = `<div class="chat-error">Failed to load chats</div>`;
+            }
+        });
+}
+
+// Helper function to get logged-in username
+function getLoggedInUsername() {
+    if (window.loggedInUsername && window.loggedInUsername.trim()) {
+        return window.loggedInUsername.trim();
+    }
+
+    // Try to get from session storage first
+    let username = sessionStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to get from localStorage
+    username = localStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to extract from page/DOM
+    const userElement = document.getElementById('currentUsername');
+    if (userElement) return userElement.textContent;
+    
+    return null;
+}
+
+// Helper function to create a chat item element
+function createChatItem(chat, currentUser) {
+    const chatItem = document.createElement('div');
+    chatItem.className = 'chat-item';
+    
+    const displayName = chat.username;
+    const initials = displayName.substring(0, 2).toUpperCase();
+    const lastMessage = chat.lastMessage || "No messages yet";
+    const unreadCount = Number(chat.unreadCount || 0);
+    const shouldShowUnread = unreadCount > 0 && displayName !== activeChatUser;
+    const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
+
+    if (displayName === activeChatUser) {
+        chatItem.classList.add('active');
+    }
+    
+    chatItem.innerHTML = `
+        <div class="chat-avatar">${initials}</div>
+        <div class="chat-info">
+            <div class="chat-name">${displayName}</div>
+            <div class="chat-preview">
+                <div class="last-message">${lastMessage.substring(0, 30)}${lastMessage.length > 30 ? '...' : ''}</div>
+                ${shouldShowUnread ? `<div class="unread-count" title="${unreadCount} unread messages">${unreadLabel}</div>` : ''}
+            </div>
+        </div>
+    `;
+    
+    chatItem.onclick = () => openChat(displayName, chat.conversationId);
+    return chatItem;
+}
+
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);
+    loadRecentChats(); // Load recent chats dynamically
     initializeEventListeners();
+    initChatSocket();
     
     setTimeout(() => {
         if (chatMessages && chatMessages.children.length > 0) {
