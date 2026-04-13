@@ -43,10 +43,11 @@ public class CreateGroupRoomServlet extends HttpServlet {
             String roomId = groupRoomService.extractRoomId(room);
             StringBuilder json = new StringBuilder();
             json.append("{")
-                .append("\"success\":true,")
-                .append("\"roomId\":\"").append(escapeJson(roomId)).append("\",")
-                .append("\"roomName\":\"").append(escapeJson(roomName != null ? roomName.trim() : "")).append("\"")
-                .append("}");
+            .append("\"admin\":\"").append(escapeJson(creator)).append("\",")
+            .append("\"success\":true,")
+            .append("\"roomId\":\"").append(escapeJson(roomId)).append("\",")
+            .append("\"roomName\":\"").append(escapeJson(roomName != null ? roomName.trim() : "")).append("\"")
+            .append("}");
 
             PrintWriter out = response.getWriter();
             out.write(json.toString());

@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.List;
 
 @WebServlet("/group-rooms")
@@ -25,9 +24,6 @@ public class GroupRoomsServlet extends HttpServlet {
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-        response.setHeader("Pragma", "no-cache");
-        response.setDateHeader("Expires", 0);
 
         try {
             List<Document> rooms;
@@ -39,51 +35,65 @@ public class GroupRoomsServlet extends HttpServlet {
 
             StringBuilder json = new StringBuilder("[");
             boolean first = true;
+
             for (Document room : rooms) {
-                if (!first) {
-                    json.append(",");
-                }
+                if (!first) json.append(",");
+               String admin = room.getString("creator");
+                if (admin == null) admin = "";
+                boolean isAdmin = username != null && username.equals(admin);
+
+                List<String> pending = room.getList("pendingRequests", String.class);
+                boolean isPending = pending != null && pending.contains(username);
                 String roomId = groupRoomService.extractRoomId(room);
                 String roomName = room.getString("roomName") != null ? room.getString("roomName") : "";
+
+                List<String> members = room.getList("members", String.class);
                 String lastMessage = room.getString("lastMessage") != null ? room.getString("lastMessage") : "";
-                String lastMessageTime = room.getString("lastMessageTime") != null ? room.getString("lastMessageTime") : "";
-                boolean isMember = groupRoomService.isRoomMember(room, username);
-                @SuppressWarnings("unchecked")
-                List<String> members = (List<String>) room.get("members");
+
+                boolean isMember = members != null && members.contains(username);
+
                 json.append("{")
-                        .append("\"roomId\":\"").append(escapeJson(roomId)).append("\",")
-                        .append("\"roomName\":\"").append(escapeJson(roomName)).append("\",")
-                        .append("\"lastMessage\":\"").append(escapeJson(lastMessage)).append("\",")
-                        .append("\"lastMessageTime\":\"").append(escapeJson(lastMessageTime)).append("\",")
-                    .append("\"isMember\":").append(isMember).append(",")
-                        .append("\"members\":[");
-                if (members != null) {
-                    for (int i = 0; i < members.size(); i++) {
-                        if (i > 0) {
-                            json.append(",");
-                        }
-                        json.append("\"").append(escapeJson(members.get(i))).append("\"");
-                    }
-                }
-                json.append("]}");
+                .append("\"roomId\":\"").append(roomId).append("\",")
+                .append("\"roomName\":\"").append(escapeJson(roomName)).append("\",")
+                .append("\"members\":").append(convertListToJsonArray(members)).append(",")
+                .append("\"lastMessage\":\"").append(escapeJson(lastMessage)).append("\",")
+                .append("\"isMember\":").append(isMember).append(",")
+                .append("\"admin\":\"").append(escapeJson(admin)).append("\",")
+                .append("\"isAdmin\":").append(isAdmin).append(",")
+                .append("\"isPending\":").append(isPending)
+                .append("}");
+
                 first = false;
             }
-            json.append("]");
 
-            PrintWriter out = response.getWriter();
-            out.write(json.toString());
-            out.flush();
+            json.append("]");
+            response.getWriter().write(json.toString());
+
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             response.getWriter().write("{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
         }
     }
 
+    // ✅ OUTSIDE doGet (correct place)
+    private String convertListToJsonArray(List<String> list) {
+        if (list == null || list.isEmpty()) return "[]";
+
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < list.size(); i++) {
+            sb.append("\"").append(escapeJson(list.get(i))).append("\"");
+            if (i < list.size() - 1) sb.append(",");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    // ✅ OUTSIDE doGet (correct place)
     private String escapeJson(String str) {
         if (str == null) return "";
         return str.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r");
+                  .replace("\"", "\\\"")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\r");
     }
 }

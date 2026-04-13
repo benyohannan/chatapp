@@ -60,6 +60,7 @@ public class GroupRoomMessagesServlet extends HttpServlet {
                     .append("\"sender\":\"").append(escapeJson(msg.getString("sender"))).append("\",")
                     .append("\"message\":\"").append(escapeJson(msg.getString("message"))).append("\",")
                     .append("\"timestamp\":\"").append(escapeJson(msg.getString("timestamp"))).append("\",")
+                    .append("\"edited\":").append(Boolean.TRUE.equals(msg.getBoolean("edited"))).append(",")
                     .append("\"clientMessageId\":\"").append(escapeJson(msg.getString("clientMessageId"))).append("\"")
                     .append("}");
                 first = false;

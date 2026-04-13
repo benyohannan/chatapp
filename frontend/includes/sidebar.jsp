@@ -1,3 +1,20 @@
+<style>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-color, #e74c3c);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.15);
+}
+</style>
 <div class="sidebar" id="sidebar">   
     <!-- Sidebar Header -->
     <div class="sidebar-header">
@@ -19,7 +36,7 @@
 
     <div class="session-debug" style="padding: 8px 12px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">
         <div><strong>User:</strong> <%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %></div>
-        <div><strong>Session:</strong> <%= session.getId() %></div>
+        <!-- <div><strong>Session:</strong> <%= session.getId() %></div> -->
     </div>
 
     <!-- Search -->
@@ -34,6 +51,7 @@
     <!-- Chat List -->
     <div class="chat-list" id="chatList">
         <!-- Dynamic content will be loaded here -->
+       <span id="requestBadge" class="badge" title="Pending group requests"></span>
         <div class="loading-message">Loading chats...</div>
     </div>
 
@@ -52,7 +70,14 @@
             initUserSearch();
         });
 
+
+
         function fetchRecentChats() {
+            if (typeof loadRecentChats === 'function') {
+                loadRecentChats();
+                return;
+            }
+
             const username = loggedInUsername;
 
             if (!username) {
@@ -72,35 +97,23 @@
                         data.forEach(chat => {
                             const chatItem = document.createElement("div");
                             chatItem.className = "chat-item";
-                            const chatName = (chat.name && chat.name.trim()) ? chat.name.trim() : "Unknown";
-                            const avatar = chatName.charAt(0).toUpperCase();
+                            const otherParticipant = (chat.username && chat.username.trim()) ? chat.username.trim() : "Unknown";
+                            const avatar = otherParticipant.charAt(0).toUpperCase();
                             const lastMessage = chat.lastMessage || "No messages yet";
-                            const isGroupRoom = chat.isGroupRoom || false;
+                            const unreadCount = Number(chat.unreadCount || 0);
+                            const unreadBadge = unreadCount > 0
+                                ? '<div class="unread-count" title="' + unreadCount + ' unread messages">' + (unreadCount > 99 ? '99+' : unreadCount) + '</div>'
+                                : '';
 
-                            // Click handler - open group room or user chat
-                            chatItem.onclick = () => {
-                                if (isGroupRoom) {
-                                    showGroupChatModal();
-                                    // Find and click the room to open it
-                                    setTimeout(() => {
-                                        const roomItems = document.querySelectorAll('#groupChatContainer [data-room-name]');
-                                        roomItems.forEach(item => {
-                                            if (item.getAttribute('data-room-name') === chatName) {
-                                                item.click();
-                                            }
-                                        });
-                                    }, 100);
-                                } else {
-                                    openChat(chatName);
-                                }
-                            };
-
+                            chatItem.onclick = () => openChat(otherParticipant);
+                                
                             chatItem.innerHTML =
                                 '<div class="chat-avatar">' + avatar + '</div>' +
                                 '<div class="chat-info">' +
-                                    '<div class="chat-name">' + (isGroupRoom ? '🏠 ' : '') + chatName + '</div>' +
+                                    '<div class="chat-name">' + otherParticipant + '</div>' +
                                     '<div class="chat-preview">' +
                                         '<div class="last-message">' + lastMessage + '</div>' +
+                                        unreadBadge +
                                     '</div>' +
                                 '</div>';
                             chatList.appendChild(chatItem);

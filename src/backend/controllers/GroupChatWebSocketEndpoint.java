@@ -49,40 +49,51 @@ public class GroupChatWebSocketEndpoint {
     @OnMessage
     public void onMessage(String message, Session session) {
         String type = value(message, "type");
-        if (!"chat".equals(type)) {
-            return;
-        }
-
         String roomName = value(message, "roomName");
-        String sender = value(message, "sender");
-        String text = value(message, "message");
-        String timestamp = value(message, "timestamp");
-        String messageId = value(message, "messageId");
-        String clientMessageId = value(message, "clientMessageId");
-
-        if (roomName == null || sender == null || text == null) {
+        if (roomName == null || roomName.isBlank()) {
             return;
         }
 
-        String payload = "{" 
-                + "\"type\":\"chat\"," 
-                + "\"roomName\":\"" + esc(roomName) + "\"," 
-                + "\"sender\":\"" + esc(sender) + "\"," 
-                + "\"message\":\"" + esc(text) + "\"," 
-                + "\"messageId\":\"" + esc(messageId == null ? "" : messageId) + "\"," 
-                + "\"clientMessageId\":\"" + esc(clientMessageId == null ? "" : clientMessageId) + "\"," 
-                + "\"timestamp\":\"" + esc(timestamp == null ? "" : timestamp) + "\"" 
-                + "}";
+        if ("chat".equals(type)) {
+            String sender = value(message, "sender");
+            String text = value(message, "message");
+            String timestamp = value(message, "timestamp");
+            String messageId = value(message, "messageId");
+            String clientMessageId = value(message, "clientMessageId");
 
-        Set<Session> sessions = roomSessions.get(roomName.toLowerCase());
-        if (sessions == null) {
-            return;
-        }
-
-        for (Session target : sessions) {
-            if (target != null && target.isOpen()) {
-                target.getAsyncRemote().sendText(payload);
+            if (sender == null || text == null) {
+                return;
             }
+
+            broadcastToRoom(roomName, "{"
+                + "\"type\":\"chat\","
+                + "\"roomName\":\"" + esc(roomName) + "\","
+                + "\"sender\":\"" + esc(sender) + "\","
+                + "\"message\":\"" + esc(text) + "\","
+                + "\"messageId\":\"" + esc(messageId == null ? "" : messageId) + "\","
+                + "\"clientMessageId\":\"" + esc(clientMessageId == null ? "" : clientMessageId) + "\","
+                + "\"timestamp\":\"" + esc(timestamp == null ? "" : timestamp) + "\""
+                + "}");
+            return;
+        }
+
+        if ("edit".equals(type)) {
+            String sender = value(message, "sender");
+            String text = value(message, "message");
+            String timestamp = value(message, "timestamp");
+            String messageId = value(message, "messageId");
+            if (sender == null || text == null || messageId == null) {
+                return;
+            }
+
+            broadcastToRoom(roomName, "{"
+                + "\"type\":\"edit\","
+                + "\"roomName\":\"" + esc(roomName) + "\","
+                + "\"sender\":\"" + esc(sender) + "\","
+                + "\"message\":\"" + esc(text) + "\","
+                + "\"messageId\":\"" + esc(messageId) + "\","
+                + "\"timestamp\":\"" + esc(timestamp == null ? "" : timestamp) + "\""
+                + "}");
         }
     }
 
@@ -153,5 +164,43 @@ public class GroupChatWebSocketEndpoint {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    public static void sendEditEvent(String roomName, String sender, String messageId, String message, String timestamp) {
+        broadcastToRoom(roomName, "{"
+            + "\"type\":\"edit\","
+            + "\"roomName\":\"" + escStatic(roomName) + "\","
+            + "\"sender\":\"" + escStatic(sender) + "\","
+            + "\"message\":\"" + escStatic(message) + "\","
+            + "\"messageId\":\"" + escStatic(messageId) + "\","
+            + "\"timestamp\":\"" + escStatic(timestamp == null ? "" : timestamp) + "\""
+            + "}");
+    }
+
+    private static void broadcastToRoom(String roomName, String payload) {
+        if (roomName == null || roomName.isBlank() || payload == null || payload.isBlank()) {
+            return;
+        }
+
+        Set<Session> sessions = roomSessions.get(roomName.toLowerCase());
+        if (sessions == null) {
+            return;
+        }
+
+        for (Session target : sessions) {
+            if (target != null && target.isOpen()) {
+                target.getAsyncRemote().sendText(payload);
+            }
+        }
+    }
+
+    private static String escStatic(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r");
     }
 }

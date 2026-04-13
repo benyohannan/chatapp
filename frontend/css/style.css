@@ -267,6 +267,11 @@ body {
   z-index: 100;
 }
 
+.sidebar.expanded {
+  width: 100%;
+  min-width: 100%;
+}
+
 .sidebar-header {
   background: var(--secondary-bg);
   padding: 15px 20px;
@@ -458,7 +463,8 @@ body {
 }
 
 .chat-item.active .chat-name,
-.chat-item.active .chat-preview {
+.chat-item.active .chat-preview,
+.chat-item.active.last-message {
   color: #111b21;
 }
 
@@ -523,15 +529,17 @@ body {
 .unread-count {
   background: var(--green-primary);
   color: white;
-  border-radius: 50%;
-  width: 20px;
+  border-radius: 999px;
+  min-width: 20px;
   height: 20px;
+  padding: 0 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: bold;
   margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* Main Chat Area */
@@ -542,6 +550,10 @@ body {
   background: var(--chat-bg);
   transition: transform 0.3s ease;
   z-index: 99;
+}
+
+.main-chat.collapsed {
+  display: none;
 }
 
 .main-chat {

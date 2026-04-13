@@ -17,6 +17,25 @@
     </div>
 </div>
 
+<div class="context-menu" id="contextMenu" style="display:none;">
+    <div class="context-menu-item" id="replyOption">
+        <i class="fas fa-reply"></i>
+        <span>Reply</span>
+    </div>
+    <div class="context-menu-item" id="editOption">
+        <i class="fas fa-pen"></i>
+        <span>Edit</span>
+    </div>
+    <div class="context-menu-item" id="copyOption">
+        <i class="fas fa-copy"></i>
+        <span>Copy</span>
+    </div>
+    <div class="context-menu-item danger" id="deleteOption">
+        <i class="fas fa-trash"></i>
+        <span>Delete</span>
+    </div>
+</div>
+
 <!-- Profile Modal -->
 <div class="modal-overlay" id="profileModal">
     <div class="profile-modal">

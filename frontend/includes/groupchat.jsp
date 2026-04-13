@@ -50,7 +50,17 @@
                     <h3 id="groupTitle">Select or create a room</h3>
                     <div class="group-chat-meta" id="groupRoomMeta">Search rooms on the left or create a new one.</div>
                 </div>
-                <button class="group-secondary-btn" id="groupRefreshRoomsBtn" type="button">Refresh</button>
+                <div class="group-chat-header-actions">
+                    <button class="group-secondary-btn group-request-btn" id="groupRequestsBtn" type="button" style="display:none;">
+                        Requests <span class="group-request-badge" id="requestBadge" style="display:none;">0</span>
+                    </button>
+                    <button class="group-secondary-btn" id="groupRefreshRoomsBtn" type="button">Refresh</button>
+                </div>
+            </div>
+
+            <div class="group-requests-panel" id="groupRequestsPanel" style="display:none;">
+                <div class="group-requests-title">Pending join requests</div>
+                <div class="group-requests-list" id="groupRequestsList"></div>
             </div>
 
             <div class="group-empty-state" id="groupEmptyState">
@@ -105,6 +115,10 @@
     color: var(--groupchat-text);
     font-family: inherit;
     overflow: hidden;
+}
+
+.group-chat-container.room-active .group-room-panel {
+    display: none;
 }
 
 .group-room-panel {
@@ -284,6 +298,75 @@
     transform: translateY(-1px);
 }
 
+.group-chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.group-request-btn {
+    position: relative;
+}
+
+.group-request-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.group-requests-panel {
+    margin: 14px 22px 0;
+    padding: 16px;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 18px;
+    background: var(--groupchat-card);
+}
+
+.group-requests-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--groupchat-muted);
+    margin-bottom: 12px;
+}
+
+.group-requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.group-request-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.group-request-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.group-request-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .group-helper-text {
     line-height: 1.45;
 }
@@ -368,6 +451,7 @@
 }
 
 .group-message-bubble {
+    position: relative;
     max-width: min(72%, 640px);
     padding: 10px 14px;
     border-radius: 18px;
@@ -404,6 +488,112 @@
     opacity: 0.72;
     margin-top: 6px;
     text-align: right;
+}
+
+.group-message-delete {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.16);
+    color: inherit;
+    cursor: pointer;
+}
+
+.group-message-edit {
+    position: absolute;
+    top: 8px;
+    right: 40px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.16);
+    color: inherit;
+    cursor: pointer;
+}
+
+.group-message-row.sent:hover .group-message-delete,
+.group-message-row.sent:hover .group-message-edit {
+    display: inline-flex;
+}
+
+.group-message-row.sent .group-message-bubble {
+    padding-right: 76px;
+}
+
+.group-edited-label {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.group-message-editing .group-message-text,
+.group-message-editing .group-message-time,
+.group-message-editing .group-message-sender {
+    display: none;
+}
+
+.group-inline-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.group-inline-editor textarea {
+    width: 100%;
+    min-height: 82px;
+    resize: vertical;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.12);
+    color: inherit;
+    font: inherit;
+    line-height: 1.45;
+    outline: none;
+}
+
+.group-inline-editor textarea:focus {
+    border-color: rgba(37, 211, 102, 0.65);
+    box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.12);
+}
+
+.group-inline-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.group-inline-editor-actions button {
+    min-width: 84px;
+    height: 38px;
+    border-radius: 12px;
+    border: 1px solid var(--groupchat-line);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.group-inline-editor-cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: inherit;
+}
+
+.group-inline-editor-save {
+    background: linear-gradient(135deg, var(--groupchat-accent) 0%, var(--groupchat-accent-2) 100%);
+    color: #fff;
+    border-color: transparent;
 }
 
 .chat-input-container {
@@ -476,6 +666,8 @@ let groupChatState = {
     selectedMembers: [],
     activeRoomName: null,
     activeRoomMembers: [],
+    activeRoomCreator: null,
+    isActiveRoomCreator: false,
     ws: null,
     pollTimer: null,
     suggestionsTimer: null,
@@ -495,6 +687,7 @@ function showGroupChatModal() {
         return;
     }
 
+    container.classList.remove('room-active');
     container.style.display = 'flex';
     showCreateScreen();
     refreshGroupRooms();
@@ -503,25 +696,35 @@ function showGroupChatModal() {
 
 function hideGroupChatModal() {
     stopGroupRoomRealtime();
+    groupChatState.activeRoomName = null;
+    groupChatState.activeRoomMembers = [];
+    groupChatState.activeRoomCreator = null;
+    groupChatState.isActiveRoomCreator = false;
     const container = document.getElementById('groupChatContainer');
     if (container) {
         container.style.display = 'none';
     }
+    toggleGroupRequestsPanel(false);
 }
 
 function showCreateScreen() {
+    const container = document.getElementById('groupChatContainer');
     const emptyState = document.getElementById('groupEmptyState');
     const messages = document.getElementById('groupRoomMessages');
     const inputBar = document.getElementById('groupChatInputBar');
+    if (container) container.classList.remove('room-active');
     if (emptyState) emptyState.style.display = 'flex';
     if (messages) messages.style.display = 'none';
     if (inputBar) inputBar.style.display = 'none';
+    toggleGroupRequestsPanel(false);
 }
 
 function showChatView() {
+    const container = document.getElementById('groupChatContainer');
     const emptyState = document.getElementById('groupEmptyState');
     const messages = document.getElementById('groupRoomMessages');
     const inputBar = document.getElementById('groupChatInputBar');
+    if (container) container.classList.add('room-active');
     if (emptyState) emptyState.style.display = 'none';
     if (messages) messages.style.display = 'block';
     if (inputBar) inputBar.style.display = 'flex';
@@ -534,6 +737,10 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function buildGroupMessageHtml(text, edited) {
+    return escapeHtml(text) + (edited ? '<span class="group-edited-label">edited</span>' : '');
 }
 
 function renderSelectedMembers() {
@@ -615,7 +822,12 @@ function renderGroupRooms(rooms) {
 
         const members = Array.isArray(room.members) ? room.members : [];
         const memberSummary = members.length ? members.join(', ') : 'No members';
-        const actionLabel = room.isMember ? 'Open room' : 'Join room';
+        let actionLabel = 'Join room';
+        if (room.isMember) {
+            actionLabel = 'Open room';
+        } else if (room.isPending) {
+            actionLabel = 'Request sent';
+        }
 
         item.innerHTML =
             '<div class="group-room-result-title">' + escapeHtml(room.roomName || 'Untitled room') + '</div>' +
@@ -625,7 +837,9 @@ function renderGroupRooms(rooms) {
 
         item.addEventListener('click', function() {
             if (room.isMember) {
-                openGroupRoom(room.roomName, room.members || []);
+                openGroupRoom(room.roomName, room.members || [], room.admin || '', !!room.isAdmin);
+            } else if (room.isPending) {
+                alert('Join request already sent to the room creator.');
             } else {
                 joinGroupRoom(room.roomName);
             }
@@ -702,7 +916,7 @@ function clearGroupRoomState() {
     }
 }
 
-function openGroupRoom(roomName, members) {
+function openGroupRoom(roomName, members, creator, isCreator) {
     const cleanRoomName = (roomName || '').trim();
     if (!cleanRoomName) {
         return;
@@ -710,14 +924,149 @@ function openGroupRoom(roomName, members) {
 
     groupChatState.activeRoomName = cleanRoomName;
     groupChatState.activeRoomMembers = Array.isArray(members) ? members : [];
+    groupChatState.activeRoomCreator = (creator || '').trim();
+    groupChatState.isActiveRoomCreator = Boolean(isCreator);
     document.getElementById('groupTitle').textContent = cleanRoomName;
     document.getElementById('groupRoomMeta').textContent = groupChatState.activeRoomMembers.length ? ('Members: ' + groupChatState.activeRoomMembers.join(', ')) : 'Room members loaded from server';
 
     showChatView();
+    updateGroupRequestButton();
     clearGroupRoomState();
     loadGroupRoomMessages(cleanRoomName);
     startGroupRoomRealtime(cleanRoomName);
     refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+}
+
+function findGroupMessageRow(messageId) {
+    if (!messageId) {
+        return null;
+    }
+    return document.querySelector('.group-message-bubble[data-message-id="' + messageId + '"]')?.closest('.group-message-row') || null;
+}
+
+function applyGroupMessageEdit(messageId, text, edited) {
+    const row = findGroupMessageRow(messageId);
+    if (!row) {
+        return;
+    }
+
+    cancelGroupMessageInlineEdit(row);
+
+    const textElement = row.querySelector('.group-message-text');
+    if (textElement) {
+        textElement.innerHTML = buildGroupMessageHtml(text, edited);
+    }
+}
+
+function cancelGroupMessageInlineEdit(rowElement) {
+    if (!rowElement) {
+        return;
+    }
+
+    rowElement.classList.remove('group-message-editing');
+    const editor = rowElement.querySelector('.group-inline-editor');
+    if (editor) {
+        editor.remove();
+    }
+}
+
+function editGroupRoomMessage(messageId, rowElement) {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    if (!roomName || !username || !messageId || !rowElement) {
+        return;
+    }
+
+    const textElement = rowElement.querySelector('.group-message-text');
+    if (!textElement) {
+        return;
+    }
+
+    const originalText = textElement.textContent.replace(/edited\s*$/, '').trim();
+    if (rowElement.classList.contains('group-message-editing')) {
+        return;
+    }
+
+    rowElement.classList.add('group-message-editing');
+
+    const bubble = rowElement.querySelector('.group-message-bubble');
+    if (!bubble) {
+        rowElement.classList.remove('group-message-editing');
+        return;
+    }
+
+    const editor = document.createElement('div');
+    editor.className = 'group-inline-editor';
+    editor.innerHTML =
+        '<textarea class="group-inline-editor-input"></textarea>' +
+        '<div class="group-inline-editor-actions">' +
+        '<button type="button" class="group-inline-editor-cancel">Cancel</button>' +
+        '<button type="button" class="group-inline-editor-save">Save</button>' +
+        '</div>';
+
+    bubble.appendChild(editor);
+
+    const input = editor.querySelector('.group-inline-editor-input');
+    const cancelBtn = editor.querySelector('.group-inline-editor-cancel');
+    const saveBtn = editor.querySelector('.group-inline-editor-save');
+    input.value = originalText;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    function finishEditing() {
+        cancelGroupMessageInlineEdit(rowElement);
+    }
+
+    cancelBtn.addEventListener('click', finishEditing);
+
+    input.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            finishEditing();
+        }
+
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            saveBtn.click();
+        }
+    });
+
+    saveBtn.addEventListener('click', function() {
+        const cleanText = input.value.trim();
+        if (!cleanText || cleanText === originalText) {
+            finishEditing();
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        fetch('/chatapp/edit-group-message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: 'roomName=' + encodeURIComponent(roomName)
+                + '&username=' + encodeURIComponent(username)
+                + '&messageId=' + encodeURIComponent(messageId)
+                + '&message=' + encodeURIComponent(cleanText)
+        })
+            .then(response => response.json().then(body => ({ status: response.status, body: body })))
+            .then(result => {
+                if (result.status >= 400 || !result.body || result.body.success !== true) {
+                    throw new Error(result.body && result.body.error ? result.body.error : 'Unable to edit message');
+                }
+
+                applyGroupMessageEdit(messageId, cleanText, true);
+                refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+            })
+            .catch(error => {
+                console.error('Error editing group message:', error);
+                alert(error.message || 'Unable to edit message');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+            });
+    });
 }
 
 function joinGroupRoom(roomName) {
@@ -740,7 +1089,12 @@ function joinGroupRoom(roomName) {
                 throw new Error(result.body && result.body.error ? result.body.error : 'Unable to join room');
             }
 
-            openGroupRoom(result.body.roomName || cleanRoomName);
+            if (result.body && result.body.isMember) {
+                openGroupRoom(result.body.roomName || cleanRoomName, [], '', false);
+            } else {
+                refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+                alert(result.body && result.body.message ? result.body.message : 'Join request sent to the room creator.');
+            }
         })
         .catch(error => {
             console.error('Error joining room:', error);
@@ -794,7 +1148,7 @@ function createGroupRoom() {
             if (suggestions) suggestions.innerHTML = '';
 
             refreshGroupRooms();
-            openGroupRoom(createdRoomName, createdMembers);
+            openGroupRoom(createdRoomName, createdMembers, username, true);
         })
         .catch(error => {
             console.error('Error creating room:', error);
@@ -825,6 +1179,10 @@ function startGroupRoomRealtime(roomName) {
         try {
             const payload = JSON.parse(event.data);
             if (payload.type !== 'chat' || !payload.roomName || payload.roomName.toLowerCase() !== roomName.toLowerCase()) {
+                if (payload.type === 'edit' && payload.roomName && payload.roomName.toLowerCase() === roomName.toLowerCase()) {
+                    applyGroupMessageEdit(payload.messageId, payload.message || '', true);
+                    refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+                }
                 return;
             }
 
@@ -843,6 +1201,17 @@ function startGroupRoomRealtime(roomName) {
             }
 
             appendGroupRoomMessage(payload);
+            if (payload.sender && payload.sender.trim() !== getGroupUsername() && typeof window.notifyIncomingMessage === 'function') {
+                const notificationKey = [
+                    'group',
+                    payload.roomName || '',
+                    payload.messageId || '',
+                    payload.clientMessageId || '',
+                    payload.sender || '',
+                    payload.timestamp || ''
+                ].join('|');
+                window.notifyIncomingMessage((payload.roomName || 'Group room') + ' - ' + payload.sender, payload.message || '', 'group', notificationKey);
+            }
         } catch (error) {
             console.error('Invalid group websocket payload:', error);
         }
@@ -884,7 +1253,31 @@ function scheduleGroupRoomPolling(roomName) {
         }
     }, 3500);
 }
+function loadRequestBadge() {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    if (!roomName || !groupChatState.isActiveRoomCreator || !username) return;
 
+    fetch('/chatapp/pending-count?roomName=' + encodeURIComponent(roomName) + '&username=' + encodeURIComponent(username))
+        .then(res => res.json())
+        .then(data => {
+            const badge = document.getElementById('requestBadge');
+            const button = document.getElementById('groupRequestsBtn');
+
+            if (!badge || !button) return;
+
+            if (data.pending > 0) {
+                button.style.display = 'inline-flex';
+                badge.style.display = 'inline-block';
+                badge.textContent = data.pending;
+            } else {
+                badge.style.display = 'none';
+                button.style.display = groupChatState.isActiveRoomCreator ? 'inline-flex' : 'none';
+            }
+        });
+}
+
+setInterval(loadRequestBadge, 3000);
 function loadGroupRoomMessages(roomName, silent) {
     const username = getGroupUsername();
     const cleanRoomName = (roomName || '').trim();
@@ -900,6 +1293,7 @@ function loadGroupRoomMessages(roomName, silent) {
             }
 
             const messages = Array.isArray(result.body.messages) ? result.body.messages : [];
+            const existingKeys = new Set(groupChatState.currentRoomKeys);
             if (!silent) {
                 const container = document.getElementById('groupRoomMessages');
                 if (container) {
@@ -914,8 +1308,35 @@ function loadGroupRoomMessages(roomName, silent) {
                 message: message.message,
                 timestamp: message.timestamp,
                 messageId: message.id,
-                clientMessageId: message.clientMessageId
+                clientMessageId: message.clientMessageId,
+                edited: Boolean(message.edited)
             }));
+
+            if (silent) {
+                messages.forEach(function(message) {
+                    const payload = {
+                        roomName: cleanRoomName,
+                        sender: message.sender,
+                        message: message.message,
+                        timestamp: message.timestamp,
+                        messageId: message.id,
+                        clientMessageId: message.clientMessageId
+                    };
+                    const key = groupMessageKey(payload);
+                    const isOwnMessage = payload.sender && payload.sender.trim() === username;
+                    if (!isOwnMessage && key && !existingKeys.has(key) && typeof window.notifyIncomingMessage === 'function') {
+                        const notificationKey = [
+                            'group',
+                            payload.roomName || '',
+                            payload.messageId || '',
+                            payload.clientMessageId || '',
+                            payload.sender || '',
+                            payload.timestamp || ''
+                        ].join('|');
+                        window.notifyIncomingMessage((payload.roomName || 'Group room') + ' - ' + payload.sender, payload.message || '', 'group', notificationKey);
+                    }
+                });
+            }
         })
         .catch(error => {
             if (!silent) {
@@ -964,6 +1385,12 @@ function appendGroupRoomMessage(payload) {
 
     const bubble = document.createElement('div');
     bubble.className = 'group-message-bubble';
+    if (payload.messageId) {
+        bubble.setAttribute('data-message-id', payload.messageId);
+    }
+    if (key) {
+        bubble.setAttribute('data-message-key', key);
+    }
 
     const sender = document.createElement('span');
     sender.className = 'group-message-sender';
@@ -971,11 +1398,37 @@ function appendGroupRoomMessage(payload) {
 
     const text = document.createElement('div');
     text.className = 'group-message-text';
-    text.textContent = payload.message || '';
+    text.innerHTML = buildGroupMessageHtml(payload.message || '', Boolean(payload.edited));
 
     const time = document.createElement('span');
     time.className = 'group-message-time';
     time.textContent = payload.timestamp || '';
+
+    if (isSent && payload.messageId) {
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'group-message-edit';
+        editBtn.setAttribute('title', 'Edit message');
+        editBtn.innerHTML = '<i class="fas fa-pen"></i>';
+        editBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            editGroupRoomMessage(payload.messageId, row);
+        });
+        bubble.appendChild(editBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'group-message-delete';
+        deleteBtn.setAttribute('title', 'Delete message');
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteGroupRoomMessage(payload.messageId, key, row);
+        });
+        bubble.appendChild(deleteBtn);
+    }
 
     bubble.appendChild(sender);
     bubble.appendChild(text);
@@ -983,6 +1436,44 @@ function appendGroupRoomMessage(payload) {
     row.appendChild(bubble);
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
+}
+
+function deleteGroupRoomMessage(messageId, messageKey, rowElement) {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    if (!roomName || !username || !messageId || !rowElement) {
+        return;
+    }
+
+    fetch('/chatapp/delete-group-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'roomName=' + encodeURIComponent(roomName)
+            + '&username=' + encodeURIComponent(username)
+            + '&messageId=' + encodeURIComponent(messageId)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to delete message');
+            }
+
+            rowElement.remove();
+            if (messageKey) {
+                groupChatState.currentRoomKeys.delete(messageKey);
+            }
+            const messages = document.getElementById('groupRoomMessages');
+            if (messages && messages.children.length === 0) {
+                showCreateScreen();
+            }
+            refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+        })
+        .catch(error => {
+            console.error('Error deleting group message:', error);
+            alert(error.message || 'Unable to delete message');
+        });
 }
 
 function sendGroupMessage() {
@@ -1045,6 +1536,7 @@ function initGroupChatUI() {
     const sendBtn = document.getElementById('sendGroupBtn');
     const messageInput = document.getElementById('groupMessageInput');
     const refreshBtn = document.getElementById('groupRefreshRoomsBtn');
+    const requestsBtn = document.getElementById('groupRequestsBtn');
 
     initGroupMemberSearch();
 
@@ -1077,10 +1569,146 @@ function initGroupChatUI() {
             if (groupChatState.activeRoomName) {
                 loadGroupRoomMessages(groupChatState.activeRoomName);
             }
+            if (groupChatState.isActiveRoomCreator) {
+                loadPendingRequests();
+            }
+        });
+    }
+
+    if (requestsBtn) {
+        requestsBtn.addEventListener('click', function() {
+            const panel = document.getElementById('groupRequestsPanel');
+            const isVisible = panel && panel.style.display !== 'none';
+            toggleGroupRequestsPanel(!isVisible);
+            if (!isVisible) {
+                loadPendingRequests();
+            }
         });
     }
 
     refreshGroupRooms();
+}
+
+function updateGroupRequestButton() {
+    const requestsBtn = document.getElementById('groupRequestsBtn');
+    if (!requestsBtn) {
+        return;
+    }
+    requestsBtn.style.display = groupChatState.isActiveRoomCreator ? 'inline-flex' : 'none';
+    if (groupChatState.isActiveRoomCreator) {
+        loadRequestBadge();
+    } else {
+        toggleGroupRequestsPanel(false);
+    }
+}
+
+function toggleGroupRequestsPanel(show) {
+    const panel = document.getElementById('groupRequestsPanel');
+    if (!panel) {
+        return;
+    }
+    panel.style.display = show && groupChatState.isActiveRoomCreator ? 'block' : 'none';
+}
+
+function loadPendingRequests() {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    const list = document.getElementById('groupRequestsList');
+
+    if (!roomName || !username || !groupChatState.isActiveRoomCreator || !list) {
+        return;
+    }
+
+    fetch('/chatapp/pending-requests?roomName=' + encodeURIComponent(roomName) + '&username=' + encodeURIComponent(username), { cache: 'no-store' })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to load pending requests');
+            }
+            renderPendingRequests(Array.isArray(result.body) ? result.body : []);
+            loadRequestBadge();
+        })
+        .catch(error => {
+            console.error('Error loading pending requests:', error);
+        });
+}
+
+function renderPendingRequests(requests) {
+    const list = document.getElementById('groupRequestsList');
+    if (!list) {
+        return;
+    }
+
+    list.innerHTML = '';
+    if (!requests || requests.length === 0) {
+        list.innerHTML = '<div class="group-room-result-meta">No pending requests right now.</div>';
+        return;
+    }
+
+    requests.forEach(function(requestedUser) {
+        const item = document.createElement('div');
+        item.className = 'group-request-item';
+        item.innerHTML =
+            '<div class="group-request-name">' + escapeHtml(requestedUser) + '</div>' +
+            '<div class="group-request-actions"></div>';
+
+        const actions = item.querySelector('.group-request-actions');
+        const approveBtn = document.createElement('button');
+        approveBtn.type = 'button';
+        approveBtn.className = 'group-primary-btn';
+        approveBtn.textContent = 'Approve';
+        approveBtn.addEventListener('click', function() {
+            approvePendingRequest(requestedUser, approveBtn);
+        });
+
+        actions.appendChild(approveBtn);
+        list.appendChild(item);
+    });
+}
+
+function approvePendingRequest(requestedUser, button) {
+    const roomName = groupChatState.activeRoomName;
+    const creator = getGroupUsername();
+    if (!roomName || !creator || !requestedUser) {
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Approving...';
+    }
+
+    fetch('/chatapp/approve-join-request', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'roomName=' + encodeURIComponent(roomName)
+            + '&creator=' + encodeURIComponent(creator)
+            + '&username=' + encodeURIComponent(requestedUser)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to approve request');
+            }
+
+            groupChatState.activeRoomMembers = Array.isArray(result.body.members) ? result.body.members : groupChatState.activeRoomMembers;
+            document.getElementById('groupRoomMeta').textContent = groupChatState.activeRoomMembers.length
+                ? ('Members: ' + groupChatState.activeRoomMembers.join(', '))
+                : 'Room members loaded from server';
+
+            loadPendingRequests();
+            refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+        })
+        .catch(error => {
+            console.error('Error approving join request:', error);
+            alert(error.message || 'Unable to approve request');
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Approve';
+            }
+        });
 }
 
 if (document.readyState === 'loading') {

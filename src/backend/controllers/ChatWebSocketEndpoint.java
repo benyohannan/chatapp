@@ -57,21 +57,7 @@ public class ChatWebSocketEndpoint {
             if (sender == null || receiver == null || text == null) {
                 return;
             }
-
-            String payload = "{"
-                + "\"type\":\"chat\"," 
-                + "\"sender\":\"" + escapeJson(sender) + "\"," 
-                + "\"receiver\":\"" + escapeJson(receiver) + "\"," 
-                + "\"message\":\"" + escapeJson(text) + "\"," 
-                + "\"messageId\":\"" + escapeJson(messageId == null ? "" : messageId) + "\"," 
-                + "\"clientMessageId\":\"" + escapeJson(clientMessageId == null ? "" : clientMessageId) + "\"," 
-                + "\"timestamp\":\"" + escapeJson(timestamp == null ? "" : timestamp) + "\""
-                + "}";
-
-            Session target = userSessions.get(receiver);
-            if (target != null && target.isOpen()) {
-                target.getAsyncRemote().sendText(payload);
-            }
+            sendToUser(receiver, buildChatPayload("chat", sender, receiver, text, messageId, clientMessageId, timestamp));
         }
     }
 
@@ -131,11 +117,62 @@ public class ChatWebSocketEndpoint {
             .replace("\\\\", "\\");
     }
 
-    private String escapeJson(String value) {
+    private static String escapeJson(String value) {
         return value.replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r");
+    }
+
+    public static void sendChatEvent(String sender, String receiver, String message, String messageId,
+                                     String clientMessageId, String timestamp) {
+        sendToUser(receiver, buildChatPayload("chat", sender, receiver, message, messageId, clientMessageId, timestamp));
+    }
+
+    public static void sendEditEvent(String sender, String receiver, String messageId, String message, String timestamp) {
+        String payload = "{"
+            + "\"type\":\"edit\","
+            + "\"sender\":\"" + escapeJson(sender) + "\","
+            + "\"receiver\":\"" + escapeJson(receiver) + "\","
+            + "\"messageId\":\"" + escapeJson(messageId) + "\","
+            + "\"message\":\"" + escapeJson(message) + "\","
+            + "\"timestamp\":\"" + escapeJson(timestamp == null ? "" : timestamp) + "\""
+            + "}";
+        sendToUser(receiver, payload);
+    }
+
+    public static void sendDeleteEvent(String sender, String receiver, String messageId) {
+        String payload = "{"
+            + "\"type\":\"delete\","
+            + "\"sender\":\"" + escapeJson(sender) + "\","
+            + "\"receiver\":\"" + escapeJson(receiver) + "\","
+            + "\"messageId\":\"" + escapeJson(messageId) + "\""
+            + "}";
+        sendToUser(receiver, payload);
+    }
+
+    private static String buildChatPayload(String type, String sender, String receiver, String text,
+                                           String messageId, String clientMessageId, String timestamp) {
+        return "{"
+            + "\"type\":\"" + escapeJson(type) + "\","
+            + "\"sender\":\"" + escapeJson(sender) + "\","
+            + "\"receiver\":\"" + escapeJson(receiver) + "\","
+            + "\"message\":\"" + escapeJson(text) + "\","
+            + "\"messageId\":\"" + escapeJson(messageId == null ? "" : messageId) + "\","
+            + "\"clientMessageId\":\"" + escapeJson(clientMessageId == null ? "" : clientMessageId) + "\","
+            + "\"timestamp\":\"" + escapeJson(timestamp == null ? "" : timestamp) + "\""
+            + "}";
+    }
+
+    private static void sendToUser(String username, String payload) {
+        if (username == null || username.isBlank() || payload == null || payload.isBlank()) {
+            return;
+        }
+
+        Session target = userSessions.get(username);
+        if (target != null && target.isOpen()) {
+            target.getAsyncRemote().sendText(payload);
+        }
     }
 
     private String getUsernameFromQuery(Session session) {

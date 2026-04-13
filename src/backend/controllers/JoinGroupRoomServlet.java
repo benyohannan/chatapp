@@ -28,11 +28,17 @@ public class JoinGroupRoomServlet extends HttpServlet {
         try {
             Document room = groupRoomService.joinRoom(username, roomName);
             String roomId = groupRoomService.extractRoomId(room);
+            boolean isMember = groupRoomService.isRoomMember(room, username);
+            boolean isPending = room.getList("pendingRequests", String.class) != null
+                && room.getList("pendingRequests", String.class).contains(username != null ? username.trim() : "");
             StringBuilder json = new StringBuilder();
             json.append("{")
                     .append("\"success\":true,")
                     .append("\"roomId\":\"").append(escapeJson(roomId)).append("\",")
-                    .append("\"roomName\":\"").append(escapeJson(room.getString("roomName"))).append("\"")
+                    .append("\"roomName\":\"").append(escapeJson(room.getString("roomName"))).append("\",")
+                    .append("\"isMember\":").append(isMember).append(",")
+                    .append("\"isPending\":").append(isPending).append(",")
+                    .append("\"message\":\"").append(escapeJson(isMember ? "You can enter the room now." : "Join request sent to the room creator.")).append("\"")
                     .append("}");
 
             PrintWriter out = response.getWriter();

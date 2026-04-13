@@ -4,6 +4,11 @@ import backend.database.MongoConnection;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Updates;
+import com.mongodb.client.model.Sorts;
+import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
@@ -91,6 +96,7 @@ public class GroupRoomService {
                 .append("roomNameLower", normalizedLower)
                 .append("creator", creator.trim())
                 .append("members", new ArrayList<>(participantSet))
+                .append("pendingRequests", new ArrayList<String>())
                 .append("lastMessage", "")
                 .append("lastMessageTime", LocalDateTime.now().toString())
                 .append("createdAt", LocalDateTime.now().toString());
@@ -101,6 +107,10 @@ public class GroupRoomService {
     }
 
     public Document joinRoom(String username, String roomName) {
+        return requestJoinRoom(username, roomName);
+    }
+
+    public Document requestJoinRoom(String username, String roomName) {
         if (isBlank(username) || isBlank(roomName)) {
             throw new IllegalArgumentException("Username and room name are required");
         }
@@ -112,15 +122,25 @@ public class GroupRoomService {
             throw new IllegalStateException("Room not found");
         }
 
-        if (!isRoomMember(room, username)) {
-            rooms.updateOne(
-                    new Document("roomNameLower", normalizedLower),
-                    new Document("$addToSet", new Document("members", username.trim()))
-            );
-            room = rooms.find(new Document("roomNameLower", normalizedLower)).first();
+        String cleanUsername = username.trim();
+        if (isRoomMember(room, cleanUsername)) {
+            return room;
         }
 
-        return room;
+        if (isCreator(room, cleanUsername)) {
+            rooms.updateOne(
+                new Document("roomNameLower", normalizedLower),
+                new Document("$addToSet", new Document("members", cleanUsername))
+            );
+            return rooms.find(new Document("roomNameLower", normalizedLower)).first();
+        }
+
+        rooms.updateOne(
+            new Document("roomNameLower", normalizedLower),
+            new Document("$addToSet", new Document("pendingRequests", cleanUsername))
+        );
+
+        return rooms.find(new Document("roomNameLower", normalizedLower)).first();
     }
 
     public String extractRoomId(Document room) {
@@ -149,6 +169,69 @@ public class GroupRoomService {
             }
         }
         return false;
+    }
+
+    public boolean isCreator(Document room, String username) {
+        if (room == null || isBlank(username)) {
+            return false;
+        }
+        String creator = room.getString("creator");
+        return creator != null && username.trim().equals(creator.trim());
+    }
+
+    public List<String> getPendingRequests(String roomName, String requester) {
+        Document room = requireCreatorAccess(roomName, requester);
+        List<String> pending = room.getList("pendingRequests", String.class);
+        return pending == null ? new ArrayList<>() : new ArrayList<>(pending);
+    }
+
+    public int getPendingRequestCount(String roomName, String requester) {
+        return getPendingRequests(roomName, requester).size();
+    }
+
+    public Document approveJoinRequest(String roomName, String creator, String usernameToApprove) {
+        if (isBlank(roomName) || isBlank(creator) || isBlank(usernameToApprove)) {
+            throw new IllegalArgumentException("roomName, creator and username are required");
+        }
+
+        MongoCollection<Document> rooms = getRoomsCollection();
+        String normalizedLower = roomName.trim().toLowerCase();
+        String cleanUsername = usernameToApprove.trim();
+        Document room = requireCreatorAccess(roomName, creator);
+        List<String> pending = room.getList("pendingRequests", String.class);
+
+        if (pending == null || !pending.contains(cleanUsername)) {
+            throw new IllegalStateException("Join request not found");
+        }
+
+        UpdateResult result = rooms.updateOne(
+            Filters.eq("roomNameLower", normalizedLower),
+            Updates.combine(
+                Updates.pull("pendingRequests", cleanUsername),
+                Updates.addToSet("members", cleanUsername)
+            )
+        );
+
+        if (result.getMatchedCount() <= 0) {
+            throw new IllegalStateException("Unable to approve join request");
+        }
+
+        return rooms.find(Filters.eq("roomNameLower", normalizedLower)).first();
+    }
+
+    private Document requireCreatorAccess(String roomName, String requester) {
+        if (isBlank(roomName) || isBlank(requester)) {
+            throw new IllegalArgumentException("roomName and requester are required");
+        }
+
+        Document room = findRoomByName(roomName);
+        if (room == null) {
+            throw new IllegalStateException("Room not found");
+        }
+        if (!isCreator(room, requester)) {
+            throw new IllegalStateException("Only the room creator can manage join requests");
+        }
+        return room;
     }
 
     public List<Document> getMessagesForRoom(String roomName) {
@@ -192,6 +275,103 @@ public class GroupRoomService {
                         .append("lastMessageTime", LocalDateTime.now().toString()))
         );
         return messageObjectId.toHexString();
+    }
+
+    public boolean deleteRoomMessage(String roomName, String messageId, String requester) {
+        if (isBlank(roomName) || isBlank(messageId) || isBlank(requester)) {
+            return false;
+        }
+
+        MongoCollection<Document> roomMessages = getRoomMessagesCollection();
+        Document existing;
+        try {
+            existing = roomMessages.find(Filters.and(
+                    Filters.eq("_id", new ObjectId(messageId)),
+                    Filters.eq("roomNameLower", roomName.trim().toLowerCase()),
+                    Filters.eq("sender", requester.trim())
+            )).first();
+        } catch (Exception ex) {
+            return false;
+        }
+
+        if (existing == null) {
+            return false;
+        }
+
+        DeleteResult result = roomMessages.deleteOne(Filters.eq("_id", new ObjectId(messageId)));
+        if (result.getDeletedCount() <= 0) {
+            return false;
+        }
+
+        refreshRoomSummary(roomName);
+        return true;
+    }
+
+    public Document updateRoomMessage(String roomName, String messageId, String requester, String updatedMessage) {
+        if (isBlank(roomName) || isBlank(messageId) || isBlank(requester) || isBlank(updatedMessage)) {
+            return null;
+        }
+
+        MongoCollection<Document> roomMessages = getRoomMessagesCollection();
+        Document existing;
+        try {
+            existing = roomMessages.find(Filters.and(
+                Filters.eq("_id", new ObjectId(messageId)),
+                Filters.eq("roomNameLower", roomName.trim().toLowerCase()),
+                Filters.eq("sender", requester.trim())
+            )).first();
+        } catch (Exception ex) {
+            return null;
+        }
+
+        if (existing == null) {
+            return null;
+        }
+
+        String editedAt = LocalDateTime.now().toString();
+        UpdateResult result = roomMessages.updateOne(
+            Filters.eq("_id", new ObjectId(messageId)),
+            Updates.combine(
+                Updates.set("message", updatedMessage.trim()),
+                Updates.set("edited", true),
+                Updates.set("editedAt", editedAt)
+            )
+        );
+
+        if (result.getModifiedCount() <= 0) {
+            return null;
+        }
+
+        existing.put("message", updatedMessage.trim());
+        existing.put("edited", true);
+        existing.put("editedAt", editedAt);
+        refreshRoomSummary(roomName);
+        return existing;
+    }
+
+    private void refreshRoomSummary(String roomName) {
+        if (isBlank(roomName)) {
+            return;
+        }
+
+        MongoCollection<Document> roomMessages = getRoomMessagesCollection();
+        MongoCollection<Document> rooms = getRoomsCollection();
+        String normalizedLower = roomName.trim().toLowerCase();
+
+        Document latest = roomMessages.find(new Document("roomNameLower", normalizedLower))
+                .sort(Sorts.descending("timestamp"))
+                .first();
+
+        Document update = new Document();
+        if (latest != null) {
+            update.append("lastMessage", latest.getString("message") == null ? "" : latest.getString("message"));
+            update.append("lastMessageTime", latest.getString("timestamp") == null ? LocalDateTime.now().toString() : latest.getString("timestamp"));
+        } else {
+            update.append("lastMessage", "");
+            update.append("lastMessageTime", LocalDateTime.now().toString());
+        }
+
+        rooms.updateOne(new Document("roomNameLower", normalizedLower), new Document("$set", update));
     }
 
     private MongoCollection<Document> getRoomsCollection() {
