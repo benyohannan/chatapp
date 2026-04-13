@@ -1363,6 +1363,9 @@ function startGroupRoomRealtime(roomName) {
             }
 
             appendGroupRoomMessage(payload);
+            if (typeof loadRecentChats === 'function') {
+                loadRecentChats();
+            }
             if (payload.sender && payload.sender.trim() !== getGroupUsername() && typeof window.notifyIncomingMessage === 'function') {
                 const notificationKey = [
                     'group',
@@ -1688,6 +1691,9 @@ function sendGroupMessage() {
             appendGroupRoomMessage(payload);
             if (groupChatState.ws && groupChatState.ws.readyState === WebSocket.OPEN) {
                 groupChatState.ws.send(JSON.stringify(payload));
+            }
+            if (typeof loadRecentChats === 'function') {
+                loadRecentChats();
             }
             refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
         })

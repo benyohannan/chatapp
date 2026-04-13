@@ -10,6 +10,7 @@ import com.mongodb.client.model.Sorts;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 
 import java.time.LocalDateTime;
@@ -91,16 +92,19 @@ public class GroupRoomService {
         }
 
         MongoCollection<Document> rooms = getRoomsCollection();
+        String now = LocalDateTime.now().toString();
+
         Document room = new Document()
                 .append("roomName", normalizedRoomName)
                 .append("roomNameLower", normalizedLower)
                 .append("creator", creator.trim())
                 .append("members", new ArrayList<>(participantSet))
                 .append("pendingRequests", new ArrayList<String>())
+            .append("lastReadBy", buildLastReadBy(new ArrayList<>(participantSet), now))
             .append("adminOnlyMode", false)
                 .append("lastMessage", "")
-                .append("lastMessageTime", LocalDateTime.now().toString())
-                .append("createdAt", LocalDateTime.now().toString());
+            .append("lastMessageTime", now)
+            .append("createdAt", now);
 
         rooms.insertOne(room);
         Document inserted = rooms.find(new Document("roomNameLower", normalizedLower)).first();
@@ -131,7 +135,10 @@ public class GroupRoomService {
         if (isCreator(room, cleanUsername)) {
             rooms.updateOne(
                 new Document("roomNameLower", normalizedLower),
-                new Document("$addToSet", new Document("members", cleanUsername))
+                Updates.combine(
+                    Updates.addToSet("members", cleanUsername),
+                    Updates.set("lastReadBy." + cleanUsername, LocalDateTime.now().toString())
+                )
             );
             return rooms.find(new Document("roomNameLower", normalizedLower)).first();
         }
@@ -209,7 +216,8 @@ public class GroupRoomService {
             Filters.eq("roomNameLower", normalizedLower),
             Updates.combine(
                 Updates.pull("pendingRequests", cleanUsername),
-                Updates.addToSet("members", cleanUsername)
+                Updates.addToSet("members", cleanUsername),
+                Updates.set("lastReadBy." + cleanUsername, LocalDateTime.now().toString())
             )
         );
 
@@ -270,7 +278,8 @@ public class GroupRoomService {
             Filters.eq("roomNameLower", normalizedLower),
             Updates.combine(
                 Updates.pull("members", cleanUsername),
-                Updates.pull("pendingRequests", cleanUsername)
+                Updates.pull("pendingRequests", cleanUsername),
+                Updates.unset("lastReadBy." + cleanUsername)
             )
         );
 
@@ -336,6 +345,57 @@ public class GroupRoomService {
             messages.add(doc);
         }
         return messages;
+    }
+
+    public void markRoomAsRead(String roomName, String username) {
+        if (isBlank(roomName) || isBlank(username)) {
+            return;
+        }
+
+        String normalizedRoomName = roomName.trim().toLowerCase();
+        String cleanUsername = username.trim();
+        Document room = findRoomByName(roomName);
+        if (room == null || !isRoomMember(room, cleanUsername)) {
+            return;
+        }
+
+        getRoomsCollection().updateOne(
+            Filters.eq("roomNameLower", normalizedRoomName),
+            Updates.set("lastReadBy." + cleanUsername, LocalDateTime.now().toString())
+        );
+    }
+
+    public long getUnreadCountForRoom(String roomName, String username) {
+        if (isBlank(roomName) || isBlank(username)) {
+            return 0;
+        }
+
+        String cleanUsername = username.trim();
+        Document room = findRoomByName(roomName);
+        if (room == null || !isRoomMember(room, cleanUsername)) {
+            return 0;
+        }
+
+        Document lastReadBy = room.get("lastReadBy", Document.class);
+        String lastReadAt = lastReadBy != null ? lastReadBy.getString(cleanUsername) : null;
+
+        if (isBlank(lastReadAt)) {
+            String now = LocalDateTime.now().toString();
+            getRoomsCollection().updateOne(
+                Filters.eq("roomNameLower", roomName.trim().toLowerCase()),
+                Updates.set("lastReadBy." + cleanUsername, now)
+            );
+            return 0;
+        }
+
+        List<Bson> filters = new ArrayList<>();
+        filters.add(Filters.eq("roomNameLower", roomName.trim().toLowerCase()));
+        filters.add(Filters.ne("sender", cleanUsername));
+        if (!isBlank(lastReadAt)) {
+            filters.add(Filters.gt("timestamp", lastReadAt));
+        }
+
+        return getRoomMessagesCollection().countDocuments(Filters.and(filters));
     }
 
     public String saveRoomMessage(String roomName, String sender, String message, String clientMessageId) {
@@ -472,6 +532,21 @@ public class GroupRoomService {
     private MongoCollection<Document> getRoomMessagesCollection() {
         MongoDatabase db = MongoConnection.getDatabase();
         return db.getCollection("group_room_messages");
+    }
+
+    private Document buildLastReadBy(List<String> usernames, String timestamp) {
+        Document lastReadBy = new Document();
+        if (usernames == null || usernames.isEmpty()) {
+            return lastReadBy;
+        }
+
+        String safeTimestamp = isBlank(timestamp) ? LocalDateTime.now().toString() : timestamp;
+        for (String username : usernames) {
+            if (!isBlank(username)) {
+                lastReadBy.append(username.trim(), safeTimestamp);
+            }
+        }
+        return lastReadBy;
     }
 
     private boolean isBlank(String value) {

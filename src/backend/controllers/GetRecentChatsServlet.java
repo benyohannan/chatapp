@@ -72,12 +72,14 @@ public class GetRecentChatsServlet extends HttpServlet {
                 String lastMessage = room.getString("lastMessage") != null ? room.getString("lastMessage") : "";
                 String lastMessageTime = room.getString("lastMessageTime") != null ? room.getString("lastMessageTime") : "";
                 String roomId = groupRoomService.extractRoomId(room);
+                long unreadCount = groupRoomService.getUnreadCountForRoom(roomName, username);
 
                 recentEntries.add(RecentChatEntry.groupRoom(
                         roomId,
                         roomName,
                         lastMessage,
-                        lastMessageTime
+                    lastMessageTime,
+                    unreadCount
                 ));
             }
 
@@ -158,8 +160,8 @@ public class GetRecentChatsServlet extends HttpServlet {
             return new RecentChatEntry(conversationId, username, lastMessage, lastMessageTime, unreadCount, false);
         }
 
-        static RecentChatEntry groupRoom(String roomId, String roomName, String lastMessage, String lastMessageTime) {
-            return new RecentChatEntry(roomId, roomName, lastMessage, lastMessageTime, 0, true);
+        static RecentChatEntry groupRoom(String roomId, String roomName, String lastMessage, String lastMessageTime, long unreadCount) {
+            return new RecentChatEntry(roomId, roomName, lastMessage, lastMessageTime, unreadCount, true);
         }
     }
 

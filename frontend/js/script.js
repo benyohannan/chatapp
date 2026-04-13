@@ -172,8 +172,21 @@ let recentNotificationKeys = new Map();
 let incomingPopupContainer = null;
 let notificationAudioContext = null;
 let lastIncomingNotificationSoundAt = 0;
+let recentChatsRefreshTimer = null;
+let recentChatsFetchInFlight = false;
+let recentChatsRefreshQueued = false;
 const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
-const DEFAULT_EMOJI_SET = ['😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😎', '🙂', '😉', '🤗', '🤔', '😭', '😡', '😴', '🤩', '👍', '👎', '👏', '🙏', '💪', '🔥', '🎉', '❤️', '💙', '💚', '💛', '💜', '💯', '✅', '✨', '👋'];
+const DEFAULT_EMOJI_SET = [
+    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
+    '😋', '😛', '😜', '🤪', '😝', '🫠', '🤗', '🤭', '🫢', '🫣', '🤫', '🤔', '🫡', '😐', '😑', '😶', '🫥', '😏', '😒', '🙄',
+    '😬', '😮‍💨', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '😵‍💫',
+    '😭', '😢', '😥', '😰', '😨', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀',
+    '☠️', '💩', '🤡', '👻', '👽', '🤖', '👋', '🤝', '👏', '🙌', '🫶', '👐', '🤲', '🙏', '💪', '🦾', '🫵', '👌', '🤌', '🤏',
+    '✌️', '🤞', '🫰', '🤟', '🤘', '🖖', '👍', '👎', '✊', '👊', '🤛', '🤜', '🫱', '🫲', '🫳', '🫴', '❤️', '🧡', '💛', '💚',
+    '💙', '🩵', '💜', '🩷', '🖤', '🩶', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '🔥', '✨',
+    '⭐', '🌟', '💫', '⚡', '☀️', '🌙', '☁️', '🌈', '🎉', '🎊', '🎈', '🎂', '🍰', '🍕', '🍔', '🍟', '🍿', '☕', '🍵', '🍻',
+    '⚽', '🏀', '🏏', '🎮', '🎵', '🎶', '✅', '❌', '💯', '💬', '📌'
+];
 
 // User settings data
 let userSettings = {
@@ -4009,10 +4022,10 @@ function startActiveChatSync() {
     }
 
     activeChatSyncTimer = setInterval(() => {
-        if (activeChatUser) {
+        if (activeChatUser && (document.hidden || !isChatSocketReady)) {
             loadConversationMessages(activeChatUser, false);
         }
-    }, 2000);
+    }, 6000);
 }
 
 function stopActiveChatSync() {
@@ -4805,6 +4818,13 @@ function loadRecentChats() {
         return;
     }
 
+    if (recentChatsFetchInFlight) {
+        recentChatsRefreshQueued = true;
+        return;
+    }
+
+    recentChatsFetchInFlight = true;
+
     fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}`)
         .then(response => response.json())
         .then(data => {
@@ -4836,7 +4856,26 @@ function loadRecentChats() {
             if (chatList) {
                 chatList.innerHTML = `<div class="chat-error">Failed to load chats</div>`;
             }
+        })
+        .finally(() => {
+            recentChatsFetchInFlight = false;
+            if (recentChatsRefreshQueued) {
+                recentChatsRefreshQueued = false;
+                loadRecentChats();
+            }
         });
+}
+
+function startRecentChatsAutoRefresh() {
+    if (recentChatsRefreshTimer) {
+        return;
+    }
+
+    recentChatsRefreshTimer = setInterval(() => {
+        if (document.getElementById('chatList')) {
+            loadRecentChats();
+        }
+    }, 7000);
 }
 
 // Helper function to get logged-in username
@@ -4872,15 +4911,14 @@ function createChatItem(chat, currentUser) {
     const isGroupRoom = Boolean(chat.isGroupRoom || chat.isGroupChat);
     const initials = displayName.substring(0, 2).toUpperCase();
     const lastMessage = chat.lastMessage || "No messages yet";
-    const unreadCount = Number(chat.unreadCount || 0);
-    const shouldShowUnread = !isGroupRoom && unreadCount > 0 && displayName !== activeChatUser;
-    const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
-
     const activeGroupRoom = (typeof groupChatState !== 'undefined' && groupChatState && groupChatState.activeRoomName)
         ? String(groupChatState.activeRoomName).trim()
         : '';
     const isActiveUserChat = !activeGroupRoom && displayName === activeChatUser;
     const isActiveGroupRoom = isGroupRoom && activeGroupRoom && displayName.toLowerCase() === activeGroupRoom.toLowerCase();
+    const unreadCount = Number(chat.unreadCount || 0);
+    const shouldShowUnread = unreadCount > 0 && !(isGroupRoom ? isActiveGroupRoom : isActiveUserChat);
+    const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
 
     if (isActiveUserChat || isActiveGroupRoom) {
         chatItem.classList.add('active');
@@ -4915,6 +4953,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);
     loadRecentChats(); // Load recent chats dynamically
+    startRecentChatsAutoRefresh();
     initializeEventListeners();
     initChatSocket();
     

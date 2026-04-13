@@ -43,6 +43,9 @@ public class GroupRoomMessagesServlet extends HttpServlet {
                 return;
             }
 
+            // Opening a room marks messages as read for this member.
+            groupRoomService.markRoomAsRead(roomName, username);
+
             List<Document> messages = groupRoomService.getMessagesForRoom(roomName);
             StringBuilder json = new StringBuilder();
             json.append("{")
