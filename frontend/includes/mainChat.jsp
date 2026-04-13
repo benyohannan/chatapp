@@ -98,7 +98,7 @@
                 <!-- Chat Input -->
                 <div class="chat-input-container">
                     <div class="input-actions">
-                        <i class="fas fa-smile emoji-btn" title="Emoji"></i>
+                        <i class="fas fa-smile emoji-btn" id="pmEmojiBtn" title="Emoji"></i>
                         <label for="fileInput" style="cursor: pointer;">
                             <i class="fas fa-paperclip" title="Attach File"></i>
                         </label>
@@ -107,6 +107,7 @@
                     <div class="message-input-wrapper">
                         <input type="text" class="message-input" placeholder="Type a message" id="messageInput">
                     </div>
+                    <div class="emoji-picker-panel" id="pmEmojiPicker" style="display:none;"></div>
                     <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                         <i class="fas fa-paper-plane"></i>
                     </button>

@@ -46,6 +46,7 @@ public class SendMessageServlet extends HttpServlet {
             }
 
             String messageId = conversationService.saveMessage(conversationId, sender.trim(), receiver.trim(), message.trim(), clientMessageId);
+            boolean delivered = ChatWebSocketEndpoint.isUserOnline(receiver.trim());
 
             StringBuilder json = new StringBuilder();
             json.append("{")
@@ -53,6 +54,7 @@ public class SendMessageServlet extends HttpServlet {
                 .append("\"conversationId\":\"").append(escapeJson(conversationId)).append("\",")
                 .append("\"messageId\":\"").append(escapeJson(messageId)).append("\",")
                 .append("\"clientMessageId\":\"").append(escapeJson(clientMessageId)).append("\",")
+                .append("\"delivered\":").append(delivered).append(",")
                 .append("\"sender\":\"").append(escapeJson(sender.trim())).append("\",")
                 .append("\"receiver\":\"").append(escapeJson(receiver.trim())).append("\",")
                 .append("\"message\":\"").append(escapeJson(message.trim())).append("\",")

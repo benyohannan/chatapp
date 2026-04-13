@@ -42,6 +42,14 @@ public class SendGroupMessageServlet extends HttpServlet {
                 return;
             }
 
+            boolean adminOnlyMode = groupRoomService.isAdminOnlyMode(room);
+            boolean isCreator = groupRoomService.isCreator(room, sender);
+            if (adminOnlyMode && !isCreator) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.getWriter().write("{\"error\":\"Only room admin can send messages right now\"}");
+                return;
+            }
+
             String savedId = groupRoomService.saveRoomMessage(roomName, sender.trim(), message.trim(), clientMessageId);
             String now = LocalDateTime.now().toString();
 

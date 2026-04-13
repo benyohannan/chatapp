@@ -46,9 +46,14 @@
     <div class="group-chat-area">
         <div class="group-chat-view">
             <div class="group-chat-header">
-                <div>
-                    <h3 id="groupTitle">Select or create a room</h3>
-                    <div class="group-chat-meta" id="groupRoomMeta">Search rooms on the left or create a new one.</div>
+                <div class="group-chat-header-main">
+                    <button class="group-mobile-back-btn" id="groupMobileBackBtn" type="button" title="Back to chats">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div>
+                        <h3 id="groupTitle" class="group-room-title-button" title="View members">Select or create a room</h3>
+                        <div class="group-chat-meta" id="groupRoomMeta">Search rooms on the left or create a new one.</div>
+                    </div>
                 </div>
                 <div class="group-chat-header-actions">
                     <button class="group-secondary-btn group-request-btn" id="groupRequestsBtn" type="button" style="display:none;">
@@ -63,6 +68,15 @@
                 <div class="group-requests-list" id="groupRequestsList"></div>
             </div>
 
+            <div class="group-members-panel" id="groupMembersPanel" style="display:none;">
+                <div class="group-requests-title">Room members</div>
+                <label class="group-admin-only-toggle" id="groupAdminOnlyToggleWrap" style="display:none;">
+                    <input type="checkbox" id="groupAdminOnlyToggle">
+                    <span>Admin-only message mode</span>
+                </label>
+                <div class="group-members-list" id="groupMembersList"></div>
+            </div>
+
             <div class="group-empty-state" id="groupEmptyState">
                 <div class="group-empty-card">
                     <i class="fas fa-comments"></i>
@@ -73,8 +87,12 @@
 
             <div class="chat-messages group-room-messages" id="groupRoomMessages" style="display:none;"></div>
 
+            <div class="group-admin-mode-notice" id="groupAdminModeNotice" style="display:none;">Only admin can message now</div>
+
             <div class="chat-input-container" id="groupChatInputBar" style="display:none;">
+                <button id="groupEmojiBtn" class="group-emoji-btn" type="button" title="Emoji"><i class="fas fa-smile"></i></button>
                 <input type="text" id="groupMessageInput" placeholder="Type a message...">
+                <div class="emoji-picker-panel" id="groupEmojiPicker" style="display:none;"></div>
                 <button id="sendGroupBtn" type="button"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
@@ -149,6 +167,14 @@
     font-size: 24px;
     font-weight: 700;
     letter-spacing: -0.4px;
+}
+
+.group-room-title-button {
+    cursor: pointer;
+}
+
+.group-room-title-button:hover {
+    text-decoration: underline;
 }
 
 .group-panel-kicker {
@@ -331,6 +357,14 @@
     background: var(--groupchat-card);
 }
 
+.group-members-panel {
+    margin: 14px 22px 0;
+    padding: 16px;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 18px;
+    background: var(--groupchat-card);
+}
+
 .group-requests-title {
     font-size: 13px;
     font-weight: 700;
@@ -367,6 +401,37 @@
     gap: 8px;
 }
 
+.group-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.group-member-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.group-member-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.group-admin-only-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--groupchat-muted);
+}
+
 .group-helper-text {
     line-height: 1.45;
 }
@@ -393,6 +458,24 @@
     border-bottom: 1px solid var(--groupchat-line);
     background: rgba(255, 255, 255, 0.03);
     align-items: center;
+}
+
+.group-chat-header-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.group-mobile-back-btn {
+    display: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--groupchat-line);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--groupchat-text);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 .group-empty-state {
@@ -603,6 +686,18 @@
     padding: 16px 20px;
     border-top: 1px solid var(--groupchat-line);
     background: rgba(0, 0, 0, 0.06);
+    position: relative;
+}
+
+.group-emoji-btn {
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--groupchat-line);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--groupchat-text);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 .chat-input-container button {
@@ -614,6 +709,33 @@
     color: white;
     cursor: pointer;
     flex-shrink: 0;
+}
+
+.group-admin-mode-notice {
+    align-self: center;
+    margin: 8px auto;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.28);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.group-admin-mode-notice.flash {
+    animation: groupNoticePop 0.35s ease;
+}
+
+@keyframes groupNoticePop {
+    from {
+        transform: translateY(8px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 @media (max-width: 1024px) {
@@ -635,6 +757,12 @@
         height: 100%;
         display: flex;
         flex-direction: column;
+    }
+
+    .group-mobile-back-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .group-room-messages {
@@ -667,6 +795,7 @@ let groupChatState = {
     activeRoomName: null,
     activeRoomMembers: [],
     activeRoomCreator: null,
+    adminOnlyMode: false,
     isActiveRoomCreator: false,
     ws: null,
     pollTimer: null,
@@ -699,6 +828,7 @@ function hideGroupChatModal() {
     groupChatState.activeRoomName = null;
     groupChatState.activeRoomMembers = [];
     groupChatState.activeRoomCreator = null;
+    groupChatState.adminOnlyMode = false;
     groupChatState.isActiveRoomCreator = false;
     const container = document.getElementById('groupChatContainer');
     if (container) {
@@ -712,11 +842,26 @@ function showCreateScreen() {
     const emptyState = document.getElementById('groupEmptyState');
     const messages = document.getElementById('groupRoomMessages');
     const inputBar = document.getElementById('groupChatInputBar');
+    const notice = document.getElementById('groupAdminModeNotice');
     if (container) container.classList.remove('room-active');
     if (emptyState) emptyState.style.display = 'flex';
     if (messages) messages.style.display = 'none';
     if (inputBar) inputBar.style.display = 'none';
+    if (notice) notice.style.display = 'none';
     toggleGroupRequestsPanel(false);
+    toggleGroupMembersPanel(false);
+}
+
+function goBackFromGroupChatMobile() {
+    if (window.innerWidth <= 768) {
+        hideGroupChatModal();
+        if (typeof showRecentChatsPanel === 'function') {
+            showRecentChatsPanel();
+        }
+        return;
+    }
+
+    hideGroupChatModal();
 }
 
 function showChatView() {
@@ -837,7 +982,7 @@ function renderGroupRooms(rooms) {
 
         item.addEventListener('click', function() {
             if (room.isMember) {
-                openGroupRoom(room.roomName, room.members || [], room.admin || '', !!room.isAdmin);
+                openGroupRoom(room.roomName, room.members || [], room.admin || '', !!room.isAdmin, !!room.adminOnlyMode);
             } else if (room.isPending) {
                 alert('Join request already sent to the room creator.');
             } else {
@@ -916,25 +1061,42 @@ function clearGroupRoomState() {
     }
 }
 
-function openGroupRoom(roomName, members, creator, isCreator) {
+function openGroupRoom(roomName, members, creator, isCreator, adminOnlyMode) {
     const cleanRoomName = (roomName || '').trim();
     if (!cleanRoomName) {
         return;
+    }
+
+    // Ensure only one selection type is active at a time.
+    if (typeof activeChatUser !== 'undefined') {
+        activeChatUser = null;
+    }
+    if (typeof displayedConversationUser !== 'undefined') {
+        displayedConversationUser = null;
+    }
+    if (typeof stopActiveChatSync === 'function') {
+        stopActiveChatSync();
     }
 
     groupChatState.activeRoomName = cleanRoomName;
     groupChatState.activeRoomMembers = Array.isArray(members) ? members : [];
     groupChatState.activeRoomCreator = (creator || '').trim();
     groupChatState.isActiveRoomCreator = Boolean(isCreator);
+    groupChatState.adminOnlyMode = Boolean(adminOnlyMode);
     document.getElementById('groupTitle').textContent = cleanRoomName;
     document.getElementById('groupRoomMeta').textContent = groupChatState.activeRoomMembers.length ? ('Members: ' + groupChatState.activeRoomMembers.join(', ')) : 'Room members loaded from server';
 
     showChatView();
+    applyGroupRoomPermissions();
     updateGroupRequestButton();
     clearGroupRoomState();
     loadGroupRoomMessages(cleanRoomName);
     startGroupRoomRealtime(cleanRoomName);
+    syncActiveRoomPermissions();
     refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+    if (typeof loadRecentChats === 'function') {
+        loadRecentChats();
+    }
 }
 
 function findGroupMessageRow(messageId) {
@@ -1210,7 +1372,7 @@ function startGroupRoomRealtime(roomName) {
                     payload.sender || '',
                     payload.timestamp || ''
                 ].join('|');
-                window.notifyIncomingMessage((payload.roomName || 'Group room') + ' - ' + payload.sender, payload.message || '', 'group', notificationKey);
+                window.notifyIncomingMessage(payload.roomName || 'Group room', (payload.sender || 'Someone') + ': ' + (payload.message || ''), 'group', notificationKey, { roomName: payload.roomName || '' });
             }
         } catch (error) {
             console.error('Invalid group websocket payload:', error);
@@ -1250,6 +1412,7 @@ function scheduleGroupRoomPolling(roomName) {
     groupChatState.pollTimer = setInterval(function() {
         if (roomName && groupChatState.activeRoomName && roomName.toLowerCase() === groupChatState.activeRoomName.toLowerCase()) {
             loadGroupRoomMessages(roomName, true);
+            syncActiveRoomPermissions();
         }
     }, 3500);
 }
@@ -1333,7 +1496,7 @@ function loadGroupRoomMessages(roomName, silent) {
                             payload.sender || '',
                             payload.timestamp || ''
                         ].join('|');
-                        window.notifyIncomingMessage((payload.roomName || 'Group room') + ' - ' + payload.sender, payload.message || '', 'group', notificationKey);
+                        window.notifyIncomingMessage(payload.roomName || 'Group room', (payload.sender || 'Someone') + ': ' + (payload.message || ''), 'group', notificationKey, { roomName: payload.roomName || '' });
                     }
                 });
             }
@@ -1482,6 +1645,11 @@ function sendGroupMessage() {
         return;
     }
 
+    if (groupChatState.adminOnlyMode && !groupChatState.isActiveRoomCreator) {
+        alert('Admin-only mode is enabled. Only room admin can send messages.');
+        return;
+    }
+
     const message = input.value.trim();
     if (!message) {
         return;
@@ -1537,6 +1705,11 @@ function initGroupChatUI() {
     const messageInput = document.getElementById('groupMessageInput');
     const refreshBtn = document.getElementById('groupRefreshRoomsBtn');
     const requestsBtn = document.getElementById('groupRequestsBtn');
+    const title = document.getElementById('groupTitle');
+    const adminOnlyToggle = document.getElementById('groupAdminOnlyToggle');
+    const mobileBackBtn = document.getElementById('groupMobileBackBtn');
+    const groupEmojiBtn = document.getElementById('groupEmojiBtn');
+    const groupEmojiPicker = document.getElementById('groupEmojiPicker');
 
     initGroupMemberSearch();
 
@@ -1563,11 +1736,29 @@ function initGroupChatUI() {
         });
     }
 
+    if (groupEmojiBtn && groupEmojiPicker && messageInput && typeof buildEmojiPicker === 'function') {
+        buildEmojiPicker(groupEmojiPicker, messageInput);
+
+        groupEmojiBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            groupEmojiPicker.style.display = groupEmojiPicker.style.display === 'block' ? 'none' : 'block';
+        });
+
+        document.addEventListener('click', function(event) {
+            if (!groupEmojiPicker.contains(event.target) && event.target !== groupEmojiBtn) {
+                groupEmojiPicker.style.display = 'none';
+            }
+        });
+    }
+
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
             refreshGroupRooms(roomSearchInput ? roomSearchInput.value.trim() : '');
             if (groupChatState.activeRoomName) {
                 loadGroupRoomMessages(groupChatState.activeRoomName);
+                loadGroupRoomMembers();
+                syncActiveRoomPermissions();
             }
             if (groupChatState.isActiveRoomCreator) {
                 loadPendingRequests();
@@ -1586,6 +1777,30 @@ function initGroupChatUI() {
         });
     }
 
+    if (title) {
+        title.addEventListener('click', function() {
+            if (!groupChatState.activeRoomName) {
+                return;
+            }
+            const panel = document.getElementById('groupMembersPanel');
+            const isVisible = panel && panel.style.display !== 'none';
+            toggleGroupMembersPanel(!isVisible);
+            if (!isVisible) {
+                loadGroupRoomMembers();
+            }
+        });
+    }
+
+    if (adminOnlyToggle) {
+        adminOnlyToggle.addEventListener('change', function() {
+            toggleAdminOnlyMode(Boolean(adminOnlyToggle.checked));
+        });
+    }
+
+    if (mobileBackBtn) {
+        mobileBackBtn.addEventListener('click', goBackFromGroupChatMobile);
+    }
+
     refreshGroupRooms();
 }
 
@@ -1602,12 +1817,251 @@ function updateGroupRequestButton() {
     }
 }
 
+function applyGroupRoomPermissions() {
+    const input = document.getElementById('groupMessageInput');
+    const sendBtn = document.getElementById('sendGroupBtn');
+    const inputBar = document.getElementById('groupChatInputBar');
+    const notice = document.getElementById('groupAdminModeNotice');
+    const canSend = !groupChatState.adminOnlyMode || groupChatState.isActiveRoomCreator;
+
+    if (inputBar) {
+        inputBar.style.display = canSend ? 'flex' : 'none';
+    }
+
+    if (notice) {
+        notice.style.display = !canSend && groupChatState.activeRoomName ? 'block' : 'none';
+    }
+
+    if (input) {
+        input.disabled = !canSend;
+        input.placeholder = canSend
+            ? 'Type a message...'
+            : 'Admin-only mode is enabled. Only room admin can send messages.';
+    }
+
+    if (sendBtn) {
+        sendBtn.disabled = !canSend;
+        sendBtn.style.opacity = canSend ? '1' : '0.6';
+        sendBtn.style.cursor = canSend ? 'pointer' : 'not-allowed';
+    }
+}
+
+function flashAdminModeNotice() {
+    const notice = document.getElementById('groupAdminModeNotice');
+    if (!notice) {
+        return;
+    }
+
+    notice.classList.remove('flash');
+    void notice.offsetWidth;
+    notice.classList.add('flash');
+}
+
+function syncActiveRoomPermissions() {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    if (!roomName || !username) {
+        return;
+    }
+
+    fetch('/chatapp/group-room-members?roomName=' + encodeURIComponent(roomName) + '&username=' + encodeURIComponent(username), { cache: 'no-store' })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                return;
+            }
+
+            const previousAdminOnlyMode = groupChatState.adminOnlyMode;
+            groupChatState.activeRoomMembers = Array.isArray(result.body.members) ? result.body.members : groupChatState.activeRoomMembers;
+            groupChatState.activeRoomCreator = (result.body.creator || '').trim();
+            groupChatState.isActiveRoomCreator = Boolean(result.body.isCreator);
+            groupChatState.adminOnlyMode = Boolean(result.body.adminOnlyMode);
+
+            if (!groupChatState.isActiveRoomCreator && !previousAdminOnlyMode && groupChatState.adminOnlyMode) {
+                flashAdminModeNotice();
+            }
+
+            applyGroupRoomPermissions();
+        })
+        .catch(() => {
+            // Ignore temporary sync errors.
+        });
+}
+
 function toggleGroupRequestsPanel(show) {
     const panel = document.getElementById('groupRequestsPanel');
     if (!panel) {
         return;
     }
     panel.style.display = show && groupChatState.isActiveRoomCreator ? 'block' : 'none';
+    if (show) {
+        toggleGroupMembersPanel(false);
+    }
+}
+
+function toggleGroupMembersPanel(show) {
+    const panel = document.getElementById('groupMembersPanel');
+    if (!panel) {
+        return;
+    }
+    panel.style.display = show && groupChatState.activeRoomName ? 'block' : 'none';
+    if (show) {
+        toggleGroupRequestsPanel(false);
+    }
+}
+
+function loadGroupRoomMembers() {
+    const roomName = groupChatState.activeRoomName;
+    const username = getGroupUsername();
+    const list = document.getElementById('groupMembersList');
+    const toggleWrap = document.getElementById('groupAdminOnlyToggleWrap');
+    const toggleInput = document.getElementById('groupAdminOnlyToggle');
+
+    if (!roomName || !username || !list) {
+        return;
+    }
+
+    fetch('/chatapp/group-room-members?roomName=' + encodeURIComponent(roomName) + '&username=' + encodeURIComponent(username), { cache: 'no-store' })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to load room members');
+            }
+
+            groupChatState.activeRoomMembers = Array.isArray(result.body.members) ? result.body.members : [];
+            groupChatState.activeRoomCreator = (result.body.creator || '').trim();
+            groupChatState.isActiveRoomCreator = Boolean(result.body.isCreator);
+            groupChatState.adminOnlyMode = Boolean(result.body.adminOnlyMode);
+
+            if (toggleWrap && toggleInput) {
+                toggleWrap.style.display = groupChatState.isActiveRoomCreator ? 'inline-flex' : 'none';
+                toggleInput.checked = groupChatState.adminOnlyMode;
+            }
+
+            renderGroupMembers(groupChatState.activeRoomMembers);
+            applyGroupRoomPermissions();
+        })
+        .catch(error => {
+            console.error('Error loading room members:', error);
+            list.innerHTML = '<div class="group-room-result-meta">Unable to load members.</div>';
+        });
+}
+
+function renderGroupMembers(members) {
+    const list = document.getElementById('groupMembersList');
+    if (!list) {
+        return;
+    }
+
+    list.innerHTML = '';
+    const cleanMembers = Array.isArray(members) ? members : [];
+    if (cleanMembers.length === 0) {
+        list.innerHTML = '<div class="group-room-result-meta">No members found.</div>';
+        return;
+    }
+
+    cleanMembers.forEach(function(member) {
+        const item = document.createElement('div');
+        item.className = 'group-member-item';
+
+        const isCreator = groupChatState.activeRoomCreator && member === groupChatState.activeRoomCreator;
+        const canRemove = groupChatState.isActiveRoomCreator && !isCreator;
+
+        item.innerHTML = '<div class="group-member-name">' + escapeHtml(member) + (isCreator ? ' (Admin)' : '') + '</div><div class="group-request-actions"></div>';
+        const actions = item.querySelector('.group-request-actions');
+
+        if (canRemove) {
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'group-secondary-btn';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', function() {
+                removeGroupMember(member, removeBtn);
+            });
+            actions.appendChild(removeBtn);
+        }
+
+        list.appendChild(item);
+    });
+}
+
+function removeGroupMember(usernameToRemove, button) {
+    const roomName = groupChatState.activeRoomName;
+    const creator = getGroupUsername();
+    if (!roomName || !creator || !usernameToRemove) {
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Removing...';
+    }
+
+    fetch('/chatapp/remove-group-member', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'roomName=' + encodeURIComponent(roomName)
+            + '&creator=' + encodeURIComponent(creator)
+            + '&username=' + encodeURIComponent(usernameToRemove)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to remove member');
+            }
+
+            groupChatState.activeRoomMembers = Array.isArray(result.body.members) ? result.body.members : groupChatState.activeRoomMembers;
+            document.getElementById('groupRoomMeta').textContent = groupChatState.activeRoomMembers.length
+                ? ('Members: ' + groupChatState.activeRoomMembers.join(', '))
+                : 'Room members loaded from server';
+            renderGroupMembers(groupChatState.activeRoomMembers);
+            refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+        })
+        .catch(error => {
+            console.error('Error removing member:', error);
+            alert(error.message || 'Unable to remove member');
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Remove';
+            }
+        });
+}
+
+function toggleAdminOnlyMode(enabled) {
+    const roomName = groupChatState.activeRoomName;
+    const creator = getGroupUsername();
+    if (!roomName || !creator || !groupChatState.isActiveRoomCreator) {
+        return;
+    }
+
+    fetch('/chatapp/toggle-admin-only-mode', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'roomName=' + encodeURIComponent(roomName)
+            + '&creator=' + encodeURIComponent(creator)
+            + '&enabled=' + encodeURIComponent(enabled ? 'true' : 'false')
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to update admin-only mode');
+            }
+            groupChatState.adminOnlyMode = Boolean(result.body.adminOnlyMode);
+            applyGroupRoomPermissions();
+            refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
+        })
+        .catch(error => {
+            console.error('Error toggling admin-only mode:', error);
+            alert(error.message || 'Unable to update admin-only mode');
+            const toggle = document.getElementById('groupAdminOnlyToggle');
+            if (toggle) {
+                toggle.checked = groupChatState.adminOnlyMode;
+            }
+        });
 }
 
 function loadPendingRequests() {
@@ -1661,9 +2115,56 @@ function renderPendingRequests(requests) {
             approvePendingRequest(requestedUser, approveBtn);
         });
 
+        const declineBtn = document.createElement('button');
+        declineBtn.type = 'button';
+        declineBtn.className = 'group-secondary-btn';
+        declineBtn.textContent = 'Decline';
+        declineBtn.addEventListener('click', function() {
+            declinePendingRequest(requestedUser, declineBtn);
+        });
+
         actions.appendChild(approveBtn);
+        actions.appendChild(declineBtn);
         list.appendChild(item);
     });
+}
+
+function declinePendingRequest(requestedUser, button) {
+    const roomName = groupChatState.activeRoomName;
+    const creator = getGroupUsername();
+    if (!roomName || !creator || !requestedUser) {
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Declining...';
+    }
+
+    fetch('/chatapp/decline-join-request', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'roomName=' + encodeURIComponent(roomName)
+            + '&creator=' + encodeURIComponent(creator)
+            + '&username=' + encodeURIComponent(requestedUser)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to decline request');
+            }
+            loadPendingRequests();
+        })
+        .catch(error => {
+            console.error('Error declining join request:', error);
+            alert(error.message || 'Unable to decline request');
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Decline';
+            }
+        });
 }
 
 function approvePendingRequest(requestedUser, button) {

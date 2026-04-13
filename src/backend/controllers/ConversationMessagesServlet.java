@@ -42,7 +42,10 @@ public class ConversationMessagesServlet extends HttpServlet {
                 throw new IllegalStateException("Conversation id could not be resolved");
             }
 
-            conversationService.markConversationAsRead(conversationId, currentUser.trim());
+            long markedCount = conversationService.markConversationAsRead(conversationId, currentUser.trim());
+            if (markedCount > 0) {
+                ChatWebSocketEndpoint.sendReadEvent(currentUser.trim(), otherUser.trim(), conversationId);
+            }
             List<Document> messages = conversationService.getConversationMessages(conversationId);
 
             StringBuilder json = new StringBuilder();
@@ -63,6 +66,7 @@ public class ConversationMessagesServlet extends HttpServlet {
                 String clientMessageId = msg.getString("clientMessageId") != null ? msg.getString("clientMessageId") : "";
                 String timestamp = msg.getString("timestamp") != null ? msg.getString("timestamp") : "";
                 boolean edited = Boolean.TRUE.equals(msg.getBoolean("edited"));
+                boolean isRead = Boolean.TRUE.equals(msg.getBoolean("isRead"));
 
                 json.append("{")
                     .append("\"id\":\"").append(escapeJson(id)).append("\",")
@@ -71,6 +75,7 @@ public class ConversationMessagesServlet extends HttpServlet {
                     .append("\"message\":\"").append(escapeJson(message)).append("\",")
                     .append("\"clientMessageId\":\"").append(escapeJson(clientMessageId)).append("\",")
                     .append("\"timestamp\":\"").append(escapeJson(timestamp)).append("\",")
+                    .append("\"isRead\":").append(isRead).append(",")
                     .append("\"edited\":").append(edited)
                     .append("}");
 

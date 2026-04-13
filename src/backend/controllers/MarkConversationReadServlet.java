@@ -38,6 +38,9 @@ public class MarkConversationReadServlet extends HttpServlet {
             }
 
             long updated = conversationService.markConversationAsRead(conversationId, currentUser.trim());
+            if (updated > 0) {
+                ChatWebSocketEndpoint.sendReadEvent(currentUser.trim(), otherUser.trim(), conversationId);
+            }
             response.getWriter().write("{\"success\":true,\"updated\":" + updated + "}");
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

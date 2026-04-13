@@ -49,6 +49,7 @@ public class GroupRoomsServlet extends HttpServlet {
 
                 List<String> members = room.getList("members", String.class);
                 String lastMessage = room.getString("lastMessage") != null ? room.getString("lastMessage") : "";
+                boolean adminOnlyMode = room.getBoolean("adminOnlyMode", false);
 
                 boolean isMember = members != null && members.contains(username);
 
@@ -60,6 +61,7 @@ public class GroupRoomsServlet extends HttpServlet {
                 .append("\"isMember\":").append(isMember).append(",")
                 .append("\"admin\":\"").append(escapeJson(admin)).append("\",")
                 .append("\"isAdmin\":").append(isAdmin).append(",")
+                .append("\"adminOnlyMode\":").append(adminOnlyMode).append(",")
                 .append("\"isPending\":").append(isPending)
                 .append("}");
 

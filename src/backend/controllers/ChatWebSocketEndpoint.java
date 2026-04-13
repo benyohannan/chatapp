@@ -151,6 +151,24 @@ public class ChatWebSocketEndpoint {
         sendToUser(receiver, payload);
     }
 
+    public static void sendReadEvent(String reader, String sender, String conversationId) {
+        String payload = "{"
+            + "\"type\":\"read\"," 
+            + "\"sender\":\"" + escapeJson(reader) + "\"," 
+            + "\"receiver\":\"" + escapeJson(sender) + "\"," 
+            + "\"conversationId\":\"" + escapeJson(conversationId == null ? "" : conversationId) + "\""
+            + "}";
+        sendToUser(sender, payload);
+    }
+
+    public static boolean isUserOnline(String username) {
+        if (username == null || username.isBlank()) {
+            return false;
+        }
+        Session target = userSessions.get(username);
+        return target != null && target.isOpen();
+    }
+
     private static String buildChatPayload(String type, String sender, String receiver, String text,
                                            String messageId, String clientMessageId, String timestamp) {
         return "{"

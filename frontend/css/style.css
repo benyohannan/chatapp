@@ -464,7 +464,7 @@ body {
 
 .chat-item.active .chat-name,
 .chat-item.active .chat-preview,
-.chat-item.active.last-message {
+.chat-item.active .last-message {
   color: #111b21;
 }
 
@@ -1000,6 +1000,17 @@ body {
 
 .message-status {
   font-size: 12px;
+  display: inline-block;
+  min-width: 12px;
+  transition: color 0.22s ease, opacity 0.18s ease, transform 0.18s ease;
+}
+
+.message.sent .message-status.status-sent,
+.message.sent .message-status.status-delivered {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.message.sent .message-status.status-read {
   color: var(--blue-primary);
 }
 
@@ -1185,6 +1196,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
 }
 
 .input-actions {
@@ -1246,6 +1258,42 @@ body {
 
 .emoji-btn:hover {
   color: var(--text-primary);
+}
+
+.emoji-picker-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 12px;
+  width: min(320px, 90vw);
+  max-height: 210px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--secondary-bg);
+  box-shadow: 0 14px 26px var(--shadow);
+  z-index: 1200;
+}
+
+.emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.emoji-picker-item {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.emoji-picker-item:hover {
+  background: var(--hover-bg);
 }
 
 .send-btn {
@@ -1676,6 +1724,63 @@ body {
   box-shadow: 0 4px 12px var(--shadow);
   z-index: 9999;
   animation: slideInRight 0.3s ease;
+}
+
+.incoming-popup-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(92vw, 420px);
+  pointer-events: none;
+}
+
+.incoming-popup {
+  pointer-events: auto;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--secondary-bg);
+  color: var(--text-primary);
+  padding: 12px 14px;
+  box-shadow: 0 12px 28px var(--shadow);
+  cursor: pointer;
+  animation: slideDownFade 0.22s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  will-change: opacity, transform;
+}
+
+.incoming-popup.closing {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.incoming-popup-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.incoming-popup-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+@keyframes slideDownFade {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes slideInRight {

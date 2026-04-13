@@ -97,6 +97,7 @@ public class GroupRoomService {
                 .append("creator", creator.trim())
                 .append("members", new ArrayList<>(participantSet))
                 .append("pendingRequests", new ArrayList<String>())
+            .append("adminOnlyMode", false)
                 .append("lastMessage", "")
                 .append("lastMessageTime", LocalDateTime.now().toString())
                 .append("createdAt", LocalDateTime.now().toString());
@@ -217,6 +218,95 @@ public class GroupRoomService {
         }
 
         return rooms.find(Filters.eq("roomNameLower", normalizedLower)).first();
+    }
+
+    public Document declineJoinRequest(String roomName, String creator, String usernameToDecline) {
+        if (isBlank(roomName) || isBlank(creator) || isBlank(usernameToDecline)) {
+            throw new IllegalArgumentException("roomName, creator and username are required");
+        }
+
+        MongoCollection<Document> rooms = getRoomsCollection();
+        String normalizedLower = roomName.trim().toLowerCase();
+        String cleanUsername = usernameToDecline.trim();
+        Document room = requireCreatorAccess(roomName, creator);
+        List<String> pending = room.getList("pendingRequests", String.class);
+
+        if (pending == null || !pending.contains(cleanUsername)) {
+            throw new IllegalStateException("Join request not found");
+        }
+
+        UpdateResult result = rooms.updateOne(
+            Filters.eq("roomNameLower", normalizedLower),
+            Updates.pull("pendingRequests", cleanUsername)
+        );
+
+        if (result.getMatchedCount() <= 0) {
+            throw new IllegalStateException("Unable to decline join request");
+        }
+
+        return rooms.find(Filters.eq("roomNameLower", normalizedLower)).first();
+    }
+
+    public Document removeMember(String roomName, String creator, String usernameToRemove) {
+        if (isBlank(roomName) || isBlank(creator) || isBlank(usernameToRemove)) {
+            throw new IllegalArgumentException("roomName, creator and username are required");
+        }
+
+        MongoCollection<Document> rooms = getRoomsCollection();
+        String normalizedLower = roomName.trim().toLowerCase();
+        String cleanUsername = usernameToRemove.trim();
+        Document room = requireCreatorAccess(roomName, creator);
+
+        if (isCreator(room, cleanUsername)) {
+            throw new IllegalStateException("Room creator cannot be removed");
+        }
+
+        List<String> members = room.getList("members", String.class);
+        if (members == null || !members.contains(cleanUsername)) {
+            throw new IllegalStateException("Member not found");
+        }
+
+        UpdateResult result = rooms.updateOne(
+            Filters.eq("roomNameLower", normalizedLower),
+            Updates.combine(
+                Updates.pull("members", cleanUsername),
+                Updates.pull("pendingRequests", cleanUsername)
+            )
+        );
+
+        if (result.getMatchedCount() <= 0) {
+            throw new IllegalStateException("Unable to remove member");
+        }
+
+        return rooms.find(Filters.eq("roomNameLower", normalizedLower)).first();
+    }
+
+    public Document setAdminOnlyMode(String roomName, String creator, boolean enabled) {
+        if (isBlank(roomName) || isBlank(creator)) {
+            throw new IllegalArgumentException("roomName and creator are required");
+        }
+
+        MongoCollection<Document> rooms = getRoomsCollection();
+        Document room = requireCreatorAccess(roomName, creator);
+        String normalizedLower = room.getString("roomNameLower");
+
+        UpdateResult result = rooms.updateOne(
+            Filters.eq("roomNameLower", normalizedLower),
+            Updates.set("adminOnlyMode", enabled)
+        );
+
+        if (result.getMatchedCount() <= 0) {
+            throw new IllegalStateException("Unable to update admin-only mode");
+        }
+
+        return rooms.find(Filters.eq("roomNameLower", normalizedLower)).first();
+    }
+
+    public boolean isAdminOnlyMode(Document room) {
+        if (room == null) {
+            return false;
+        }
+        return room.getBoolean("adminOnlyMode", false);
     }
 
     private Document requireCreatorAccess(String roomName, String requester) {
