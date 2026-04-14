@@ -1,3 +1,11 @@
+<%
+    String sidebarUsername = (session.getAttribute("username") instanceof backend.models.User)
+        ? ((backend.models.User) session.getAttribute("username")).getUsername()
+        : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "");
+    String sidebarInitial = !sidebarUsername.isEmpty()
+        ? sidebarUsername.substring(0, 1).toUpperCase()
+        : "?";
+%>
 <style>
 .badge {
   display: inline-flex;
@@ -35,7 +43,7 @@
     </div>
 
     <div class="session-debug" style="padding: 8px 12px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-color);">
-        <div><strong>User:</strong> <%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %></div>
+        <div><strong>User:</strong> <%= sidebarUsername %></div>
         <!-- <div><strong>Session:</strong> <%= session.getId() %></div> -->
     </div>
 
@@ -55,8 +63,37 @@
         <div class="loading-message">Loading chats...</div>
     </div>
 
+    <!-- <div class="sidebar-profile-section">
+        <button type="button" class="sidebar-profile-card" id="sidebarProfileBtn" title="Open profile">
+            <div class="sidebar-profile-avatar"><%= sidebarInitial %></div>
+            <div class="sidebar-profile-meta">
+                <div class="sidebar-profile-name"><%= sidebarUsername %></div>
+                <div class="sidebar-profile-status">Available</div>
+            </div>
+        </button> -->
+
+        <div class="sidebar-profile-actions">
+            <!-- <button type="button" class="sidebar-profile-menu-btn" id="sidebarProfileMenuBtn" title="Profile menu">
+                <i class="fas fa-ellipsis-v"></i>
+            </button> -->
+            <div class="dropdown-menu sidebar-profile-menu" id="sidebarProfileMenu">
+                <div class="dropdown-item" id="openProfileSettingsBtn">
+                    <i class="fas fa-user"></i>
+                    Profile
+                </div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item danger" id="sidebarLogoutBtn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </div>
+            </div>
+        </div>
+    <!-- </div> -->
+
+    <form id="logoutForm" action="${pageContext.request.contextPath}/logout" method="post" style="display:none;"></form>
+
     <script>
-        const loggedInUsername = '<%= (session.getAttribute("username") instanceof backend.models.User) ? ((backend.models.User) session.getAttribute("username")).getUsername() : (session.getAttribute("username") != null ? session.getAttribute("username").toString() : "") %>';
+        const loggedInUsername = '<%= sidebarUsername %>';
         const currentSessionId = '<%= session.getId() %>';
         window.loggedInUsername = loggedInUsername;
         window.currentSessionId = currentSessionId;

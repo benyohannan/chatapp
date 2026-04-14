@@ -64,6 +64,12 @@ const userSettingsModal = document.getElementById('userSettingsModal');
 const settingsBackBtn = document.getElementById('settingsBackBtn');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
 const settingsContent = document.getElementById('settingsContent');
+const sidebarProfileBtn = document.getElementById('sidebarProfileBtn');
+const sidebarProfileMenuBtn = document.getElementById('sidebarProfileMenuBtn');
+const sidebarProfileMenu = document.getElementById('sidebarProfileMenu');
+const openProfileSettingsBtn = document.getElementById('openProfileSettingsBtn');
+const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
+const logoutForm = document.getElementById('logoutForm');
 
 // Edit Profile Elements
 const editProfileModal = document.getElementById('editProfileModal');
@@ -1890,6 +1896,34 @@ function hideUserSettings() {
     hideModal(userSettingsModal);
 }
 
+function openUserProfileSettings() {
+    hideSidebarProfileMenu();
+    showUserSettings();
+}
+
+function toggleSidebarProfileMenu(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    if (sidebarProfileMenu) {
+        sidebarProfileMenu.classList.toggle('show');
+    }
+}
+
+function hideSidebarProfileMenu() {
+    if (sidebarProfileMenu) {
+        sidebarProfileMenu.classList.remove('show');
+    }
+}
+
+function submitLogoutForm() {
+    hideSidebarProfileMenu();
+    if (logoutForm) {
+        logoutForm.submit();
+    }
+}
+
 // Load settings content
 function loadSettingsContent() {
     const settingsHTML = `
@@ -2011,6 +2045,21 @@ function loadSettingsContent() {
                 <div class="settings-info">
                     <div class="settings-title">Invite a friend</div>
                     <div class="settings-subtitle">Share RainChatify with friends</div>
+                </div>
+                <div class="settings-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-item settings-item-danger" onclick="submitLogoutForm()">
+                <div class="settings-icon">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <div class="settings-info">
+                    <div class="settings-title">Logout</div>
+                    <div class="settings-subtitle">Sign out from RainChatify</div>
                 </div>
                 <div class="settings-arrow">
                     <i class="fas fa-chevron-right"></i>
@@ -3159,6 +3208,19 @@ function initializeEventListeners() {
 
     // User avatar click for settings
     addListenerIfExists(SettingControl, 'click', showUserSettings);
+    addListenerIfExists(sidebarProfileBtn, 'click', openUserProfileSettings);
+    addListenerIfExists(openProfileSettingsBtn, 'click', openUserProfileSettings);
+    addListenerIfExists(sidebarProfileMenuBtn, 'click', toggleSidebarProfileMenu);
+    addListenerIfExists(sidebarLogoutBtn, 'click', submitLogoutForm);
+    document.addEventListener('click', function(e) {
+        if (
+            sidebarProfileMenu &&
+            !e.target.closest('#sidebarProfileMenu') &&
+            !e.target.closest('#sidebarProfileMenuBtn')
+        ) {
+            hideSidebarProfileMenu();
+        }
+    });
 
     // Settings modal close buttons
     addListenerIfExists(settingsBackBtn, 'click', hideUserSettings);

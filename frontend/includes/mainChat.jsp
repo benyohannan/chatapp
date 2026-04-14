@@ -6,10 +6,8 @@
                 <div class="welcome-logo">
                     <i class="fa-solid fa-comment"></i>
                 </div>
-                <h1 class="welcome-title">RainChatify</h1>
-                <p class="welcome-subtitle">
-                    Select one of the chats to start messaging.
-                </p>
+               <h1 class="welcome-title">ZyncChat</h1>
+                <p class="tagline">Stay in Sync !</p>
             </div>
 
             <!-- Chat Interface (hidden by default) -->
