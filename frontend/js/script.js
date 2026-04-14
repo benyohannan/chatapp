@@ -19,6 +19,8 @@ const mainChat = document.getElementById('mainChat');
 const backBtn = document.getElementById('backBtn');
 const themeToggle = document.getElementById('themeToggle');
 const fileInput = document.getElementById('fileInput');
+const pmEmojiBtn = document.getElementById('pmEmojiBtn');
+const pmEmojiPicker = document.getElementById('pmEmojiPicker');
 
 // Chat search elements
 const chatSearchContainer = document.getElementById('chatSearchContainer');
@@ -62,6 +64,12 @@ const userSettingsModal = document.getElementById('userSettingsModal');
 const settingsBackBtn = document.getElementById('settingsBackBtn');
 const settingsCloseBtn = document.getElementById('settingsCloseBtn');
 const settingsContent = document.getElementById('settingsContent');
+const sidebarProfileBtn = document.getElementById('sidebarProfileBtn');
+const sidebarProfileMenuBtn = document.getElementById('sidebarProfileMenuBtn');
+const sidebarProfileMenu = document.getElementById('sidebarProfileMenu');
+const openProfileSettingsBtn = document.getElementById('openProfileSettingsBtn');
+const sidebarLogoutBtn = document.getElementById('sidebarLogoutBtn');
+const logoutForm = document.getElementById('logoutForm');
 
 // Edit Profile Elements
 const editProfileModal = document.getElementById('editProfileModal');
@@ -70,7 +78,7 @@ const editProfileSaveBtn = document.getElementById('editProfileSaveBtn');
 const editProfileContent = document.getElementById('editProfileContent');
 
 // Status Elements
-const StatusBtnOpen = document.getElementById('Status');
+const StatusBtnOpen = document.getElementById('statusBtnOpen');
 const statusModal = document.getElementById('statusModal');
 const statusBackBtn = document.getElementById('statusBackBtn');
 const statusCloseBtn = document.getElementById('statusCloseBtn');
@@ -158,6 +166,33 @@ let isSpeakerOn = false;
 let isCameraOn = false;
 let isIncomingCall = false;
 let currentCallType = 'audio';
+let activeChatUser = null;
+let chatSocket = null;
+let isChatSocketReady = false;
+let activeChatSyncTimer = null;
+let isConversationFetchInFlight = false;
+let realtimeBadge = null;
+let displayedConversationUser = null;
+let renderedMessageKeysByConversation = {};
+let recentNotificationKeys = new Map();
+let incomingPopupContainer = null;
+let notificationAudioContext = null;
+let lastIncomingNotificationSoundAt = 0;
+let recentChatsRefreshTimer = null;
+let recentChatsFetchInFlight = false;
+let recentChatsRefreshQueued = false;
+const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
+const DEFAULT_EMOJI_SET = [
+    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
+    '😋', '😛', '😜', '🤪', '😝', '🫠', '🤗', '🤭', '🫢', '🫣', '🤫', '🤔', '🫡', '😐', '😑', '😶', '🫥', '😏', '😒', '🙄',
+    '😬', '😮‍💨', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '😵‍💫',
+    '😭', '😢', '😥', '😰', '😨', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀',
+    '☠️', '💩', '🤡', '👻', '👽', '🤖', '👋', '🤝', '👏', '🙌', '🫶', '👐', '🤲', '🙏', '💪', '🦾', '🫵', '👌', '🤌', '🤏',
+    '✌️', '🤞', '🫰', '🤟', '🤘', '🖖', '👍', '👎', '✊', '👊', '🤛', '🤜', '🫱', '🫲', '🫳', '🫴', '❤️', '🧡', '💛', '💚',
+    '💙', '🩵', '💜', '🩷', '🖤', '🩶', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '🔥', '✨',
+    '⭐', '🌟', '💫', '⚡', '☀️', '🌙', '☁️', '🌈', '🎉', '🎊', '🎈', '🎂', '🍰', '🍕', '🍔', '🍟', '🍿', '☕', '🍵', '🍻',
+    '⚽', '🏀', '🏏', '🎮', '🎵', '🎶', '✅', '❌', '💯', '💬', '📌'
+];
 
 // User settings data
 let userSettings = {
@@ -1092,15 +1127,15 @@ function formatCallTime(timestamp) {
 // Theme management
 function toggleTheme() {
     const body = document.body;
-    const themeIcon = themeToggle.querySelector('i');
+    const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
     if (currentTheme === 'light') {
         body.classList.remove('light-mode');
-        themeIcon.className = 'fas fa-moon';
+        if (themeIcon) themeIcon.className = 'fas fa-moon';
         currentTheme = 'dark';
         localStorage.setItem('RainChatify-theme', 'dark');
     } else {
         body.classList.add('light-mode');
-        themeIcon.className = 'fas fa-sun';
+        if (themeIcon) themeIcon.className = 'fas fa-sun';
         currentTheme = 'light';
         localStorage.setItem('RainChatify-theme', 'light');
     }
@@ -1110,15 +1145,15 @@ function toggleTheme() {
 function loadTheme() {
     const savedTheme = localStorage.getItem('RainChatify-theme');
     const body = document.body;
-    const themeIcon = themeToggle.querySelector('i');
+    const themeIcon = themeToggle ? themeToggle.querySelector('i') : null;
 
     if (savedTheme === 'light') {
         body.classList.add('light-mode');
-        themeIcon.className = 'fas fa-sun';
+        if (themeIcon) themeIcon.className = 'fas fa-sun';
         currentTheme = 'light';
     } else {
         body.classList.remove('light-mode');
-        themeIcon.className = 'fas fa-moon';
+        if (themeIcon) themeIcon.className = 'fas fa-moon';
         currentTheme = 'dark';
     }
 }
@@ -1134,6 +1169,205 @@ function showNotification(message, type = 'info') {
         notification.remove();
     }, 3000);
 }
+window.showNotification = showNotification;
+
+function cleanupRecentNotificationKeys() {
+    // Keep a bounded cache of notified keys to avoid old-notification replays.
+    while (recentNotificationKeys.size > MAX_NOTIFICATION_DEDUPE_KEYS) {
+        const firstKey = recentNotificationKeys.keys().next().value;
+        if (!firstKey) {
+            break;
+        }
+        recentNotificationKeys.delete(firstKey);
+    }
+}
+
+function isDirectChatAlreadyOpen(route) {
+    const targetUser = route && route.userName ? String(route.userName).trim() : '';
+    if (!targetUser || !activeChatUser) {
+        return false;
+    }
+
+    const isSameUser = String(activeChatUser).trim() === targetUser;
+    const isVisible = chatInterface && chatInterface.style.display === 'flex';
+    return isSameUser && isVisible;
+}
+
+function isGroupRoomAlreadyOpen(route) {
+    const targetRoom = route && route.roomName ? String(route.roomName).trim() : '';
+    if (!targetRoom || typeof groupChatState === 'undefined' || !groupChatState) {
+        return false;
+    }
+
+    const activeRoom = groupChatState.activeRoomName ? String(groupChatState.activeRoomName).trim() : '';
+    const container = document.getElementById('groupChatContainer');
+    const isVisible = !!container && container.style.display !== 'none';
+    return isVisible && !!activeRoom && activeRoom.toLowerCase() === targetRoom.toLowerCase();
+}
+
+function playIncomingNotificationSound() {
+    const notifications = userSettings && userSettings.notifications ? userSettings.notifications : {};
+    const soundSetting = notifications.notificationSound;
+    if (soundSetting === 'none' || soundSetting === false) {
+        return;
+    }
+
+    const now = Date.now();
+    if (now - lastIncomingNotificationSoundAt < 650) {
+        return;
+    }
+    lastIncomingNotificationSoundAt = now;
+
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) {
+            return;
+        }
+
+        if (!notificationAudioContext) {
+            notificationAudioContext = new AudioCtx();
+        }
+
+        if (notificationAudioContext.state === 'suspended') {
+            notificationAudioContext.resume().catch(() => {});
+        }
+
+        const start = notificationAudioContext.currentTime;
+        const oscillator = notificationAudioContext.createOscillator();
+        const gain = notificationAudioContext.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, start);
+        oscillator.frequency.setValueAtTime(1046, start + 0.09);
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.linearRampToValueAtTime(0.11, start + 0.02);
+        gain.gain.linearRampToValueAtTime(0.0001, start + 0.2);
+
+        oscillator.connect(gain);
+        gain.connect(notificationAudioContext.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.22);
+    } catch (error) {
+        // Ignore sound errors to avoid breaking notification flow.
+    }
+}
+
+function ensureIncomingPopupContainer() {
+    if (incomingPopupContainer && document.body.contains(incomingPopupContainer)) {
+        return incomingPopupContainer;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'incoming-popup-container';
+    document.body.appendChild(container);
+    incomingPopupContainer = container;
+    return container;
+}
+
+function clearIncomingPopupNotifications(resetDedupe = false) {
+    const container = ensureIncomingPopupContainer();
+    container.innerHTML = '';
+
+    if (resetDedupe) {
+        recentNotificationKeys.clear();
+    }
+}
+
+function openIncomingNotificationTarget(category, title, route) {
+    clearIncomingPopupNotifications();
+
+    if (category === 'group') {
+        const roomName = route && route.roomName ? route.roomName : title;
+        if (typeof showGroupChatModal === 'function') {
+            showGroupChatModal();
+        }
+        if (typeof openGroupRoom === 'function' && roomName) {
+            openGroupRoom(roomName, [], '', false);
+        }
+        return;
+    }
+
+    const userName = route && route.userName ? route.userName : title;
+    if (typeof openChat === 'function' && userName) {
+        openChat(userName);
+    }
+}
+
+function showIncomingPopupNotification(title, preview, category, route) {
+    const container = ensureIncomingPopupContainer();
+
+    // Keep only the latest incoming popup visible.
+    clearIncomingPopupNotifications();
+
+    const popup = document.createElement('button');
+    popup.type = 'button';
+    popup.className = 'incoming-popup';
+    popup.innerHTML =
+        '<div class="incoming-popup-title">' + escapeHtml(title || 'New message') + '</div>' +
+        '<div class="incoming-popup-text">' + escapeHtml(preview || '') + '</div>';
+
+    popup.addEventListener('click', function() {
+        popup.classList.add('closing');
+        setTimeout(() => {
+            if (popup && popup.parentNode) {
+                popup.remove();
+            }
+        }, 180);
+        openIncomingNotificationTarget(category, title, route || null);
+    });
+
+    container.appendChild(popup);
+
+    setTimeout(() => {
+        if (popup && popup.parentNode) {
+            popup.classList.add('closing');
+            setTimeout(() => {
+                if (popup && popup.parentNode) {
+                    popup.remove();
+                }
+            }, 180);
+        }
+    }, 6000);
+}
+
+function notifyIncomingMessage(title, message, category = 'direct', dedupeKey = '', route = null) {
+    const notifications = userSettings && userSettings.notifications ? userSettings.notifications : {};
+    const isEnabled = category === 'group'
+        ? notifications.groupNotifications !== false
+        : notifications.messageNotifications !== false;
+
+    if (!isEnabled) {
+        return;
+    }
+
+    // Don't notify again if the user is already in the same conversation/room.
+    if (category === 'group' && isGroupRoomAlreadyOpen(route)) {
+        return;
+    }
+    if (category !== 'group' && isDirectChatAlreadyOpen(route)) {
+        return;
+    }
+
+    const safeTitle = title || (category === 'group' ? 'New group message' : 'New message');
+    const safeMessage = String(message || '').trim() || 'You received a new message.';
+    const preview = safeMessage.length > 70 ? safeMessage.slice(0, 67) + '...' : safeMessage;
+    const safeKey = String(dedupeKey || '').trim();
+
+    cleanupRecentNotificationKeys();
+    if (safeKey && recentNotificationKeys.has(safeKey)) {
+        return;
+    }
+    if (safeKey) {
+        recentNotificationKeys.set(safeKey, 1);
+        cleanupRecentNotificationKeys();
+    }
+
+    playIncomingNotificationSound();
+    showIncomingPopupNotification(safeTitle, preview, category, route);
+}
+
+window.notifyIncomingMessage = notifyIncomingMessage;
 
 // Modal functions
 function showModal(modalElement) {
@@ -1515,19 +1749,22 @@ function resetAddStatusForm() {
 
 // Handle status type selection
 function handleStatusTypeSelection() {
-    document.querySelectorAll('.status-type-btn').forEach(btn => {
+    const statusTypeButtons = document.querySelectorAll('.status-type-btn');
+    if (!statusTypeButtons.length) return;
+
+    statusTypeButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.status-type-btn').forEach(b => b.classList.remove('active'));
+            statusTypeButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             
             selectedStatusType = btn.dataset.type;
             
             if (selectedStatusType === 'text') {
-                textStatusInput.style.display = 'block';
-                mediaStatusInput.style.display = 'none';
+                if (textStatusInput) textStatusInput.style.display = 'block';
+                if (mediaStatusInput) mediaStatusInput.style.display = 'none';
             } else {
-                textStatusInput.style.display = 'none';
-                mediaStatusInput.style.display = 'block';
+                if (textStatusInput) textStatusInput.style.display = 'none';
+                if (mediaStatusInput) mediaStatusInput.style.display = 'block';
             }
         });
     });
@@ -1535,9 +1772,12 @@ function handleStatusTypeSelection() {
 
 // Handle background selection
 function handleBackgroundSelection() {
-    document.querySelectorAll('.bg-option').forEach(option => {
+    const bgOptions = document.querySelectorAll('.bg-option');
+    if (!bgOptions.length) return;
+
+    bgOptions.forEach(option => {
         option.addEventListener('click', () => {
-            document.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
+            bgOptions.forEach(opt => opt.classList.remove('active'));
             option.classList.add('active');
             selectedBackground = option.dataset.bg;
         });
@@ -1547,6 +1787,8 @@ function handleBackgroundSelection() {
 // Handle media selection
 function handleMediaSelection() {
     const selectMediaBtn = document.querySelector('.select-media-btn');
+    if (!selectMediaBtn || !statusMediaInput || !removeMediaBtn) return;
+
     selectMediaBtn.addEventListener('click', () => {
         statusMediaInput.click();
     });
@@ -1561,7 +1803,7 @@ function handleMediaSelection() {
     
     removeMediaBtn.addEventListener('click', () => {
         selectedMediaFile = null;
-        mediaPreview.style.display = 'none';
+        if (mediaPreview) mediaPreview.style.display = 'none';
         statusMediaInput.value = '';
     });
 }
@@ -1652,6 +1894,34 @@ function showUserSettings() {
 // Hide user settings modal
 function hideUserSettings() {
     hideModal(userSettingsModal);
+}
+
+function openUserProfileSettings() {
+    hideSidebarProfileMenu();
+    showUserSettings();
+}
+
+function toggleSidebarProfileMenu(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    if (sidebarProfileMenu) {
+        sidebarProfileMenu.classList.toggle('show');
+    }
+}
+
+function hideSidebarProfileMenu() {
+    if (sidebarProfileMenu) {
+        sidebarProfileMenu.classList.remove('show');
+    }
+}
+
+function submitLogoutForm() {
+    hideSidebarProfileMenu();
+    if (logoutForm) {
+        logoutForm.submit();
+    }
 }
 
 // Load settings content
@@ -1775,6 +2045,21 @@ function loadSettingsContent() {
                 <div class="settings-info">
                     <div class="settings-title">Invite a friend</div>
                     <div class="settings-subtitle">Share RainChatify with friends</div>
+                </div>
+                <div class="settings-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-item settings-item-danger" onclick="submitLogoutForm()">
+                <div class="settings-icon">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <div class="settings-info">
+                    <div class="settings-title">Logout</div>
+                    <div class="settings-subtitle">Sign out from RainChatify</div>
                 </div>
                 <div class="settings-arrow">
                     <i class="fas fa-chevron-right"></i>
@@ -2751,26 +3036,47 @@ function showEmptyChatState() {
 }
 
 function closeChat() {
-    showModal(closeChatModal);
+    stopActiveChatSync();
+    showRecentChatsPanel();
+    showNotification('Chat closed');
 }
 
-function confirmCloseChat() {
-    closeChatSearch();
-    closeReplyBar();
-    
-    chatInterface.style.display = 'none';
-    welcomeScreen.style.display = 'flex';
-    
+function resetActiveChatSelection() {
+    activeChatUser = null;
+    displayedConversationUser = null;
+
     document.querySelectorAll('.chat-item').forEach(item => {
         item.classList.remove('active');
     });
+}
 
-    if (isMobileDevice()) {
-        sidebar.classList.remove('hide');
-        mainChat.classList.remove('show');
+function showRecentChatsPanel() {
+    clearIncomingPopupNotifications();
+
+    closeChatSearch();
+    closeReplyBar();
+    stopActiveChatSync();
+
+    resetActiveChatSelection();
+
+    if (chatInterface && welcomeScreen) {
+        chatInterface.style.display = 'none';
+        welcomeScreen.style.display = 'flex';
     }
 
-    hideModal(closeChatModal);
+    if (sidebar && mainChat) {
+        sidebar.classList.remove('hide');
+        mainChat.classList.remove('show');
+        mainChat.classList.add('collapsed');
+        sidebar.classList.add('expanded');
+    }
+}
+
+function confirmCloseChat() {
+    showRecentChatsPanel();
+    if (closeChatModal) {
+        hideModal(closeChatModal);
+    }
     showNotification('Chat closed');
 }
 
@@ -2838,24 +3144,24 @@ function endCall() {
 
 // MESSAGING FUNCTIONS
 
+// Initialize helper for optional listeners
+function addListenerIfExists(element, type, handler, options) {
+    if (element) {
+        element.addEventListener(type, handler, options);
+    }
+}
+
 // Initialize event listeners
 function initializeEventListeners() {
     // Theme toggle
-    themeToggle.addEventListener('click', toggleTheme);
+    addListenerIfExists(themeToggle, 'click', toggleTheme);
 
     // Status icon click in sidebar
-    // const statusIcon = document.querySelector('.fa-circle-notch');
-    if (StatusBtnOpen) {
-        StatusBtnOpen.addEventListener('click', showStatusModal);
-    }
+    addListenerIfExists(StatusBtnOpen, 'click', showStatusModal);
 
     // Status modal close buttons
-    if (statusBackBtn) {
-        statusBackBtn.addEventListener('click', hideStatusModal);
-    }
-    if (statusCloseBtn) {
-        statusCloseBtn.addEventListener('click', hideStatusModal);
-    }
+    addListenerIfExists(statusBackBtn, 'click', hideStatusModal);
+    addListenerIfExists(statusCloseBtn, 'click', hideStatusModal);
     if (statusModal) {
         statusModal.addEventListener('click', function(e) {
             if (e.target === statusModal) {
@@ -2865,18 +3171,10 @@ function initializeEventListeners() {
     }
 
     // Status viewer close and navigation
-    if (statusViewerClose) {
-        statusViewerClose.addEventListener('click', hideStatusViewer);
-    }
-    if (prevStatusBtn) {
-        prevStatusBtn.addEventListener('click', () => navigateStatus('prev'));
-    }
-    if (nextStatusBtn) {
-        nextStatusBtn.addEventListener('click', () => navigateStatus('next'));
-    }
-    if (statusReplyBtn) {
-        statusReplyBtn.addEventListener('click', replyToStatus);
-    }
+    addListenerIfExists(statusViewerClose, 'click', hideStatusViewer);
+    addListenerIfExists(prevStatusBtn, 'click', () => navigateStatus('prev'));
+    addListenerIfExists(nextStatusBtn, 'click', () => navigateStatus('next'));
+    addListenerIfExists(statusReplyBtn, 'click', replyToStatus);
     if (statusReplyInput) {
         statusReplyInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -2893,12 +3191,8 @@ function initializeEventListeners() {
     }
 
     // Add status modal
-    if (addStatusBackBtn) {
-        addStatusBackBtn.addEventListener('click', hideAddStatusModal);
-    }
-    if (addStatusPostBtn) {
-        addStatusPostBtn.addEventListener('click', postStatus);
-    }
+    addListenerIfExists(addStatusBackBtn, 'click', hideAddStatusModal);
+    addListenerIfExists(addStatusPostBtn, 'click', postStatus);
     if (addStatusModal) {
         addStatusModal.addEventListener('click', function(e) {
             if (e.target === addStatusModal) {
@@ -2913,17 +3207,24 @@ function initializeEventListeners() {
     handleMediaSelection();
 
     // User avatar click for settings
-    if (SettingControl) {
-        SettingControl.addEventListener('click', showUserSettings);
-    }
+    addListenerIfExists(SettingControl, 'click', showUserSettings);
+    addListenerIfExists(sidebarProfileBtn, 'click', openUserProfileSettings);
+    addListenerIfExists(openProfileSettingsBtn, 'click', openUserProfileSettings);
+    addListenerIfExists(sidebarProfileMenuBtn, 'click', toggleSidebarProfileMenu);
+    addListenerIfExists(sidebarLogoutBtn, 'click', submitLogoutForm);
+    document.addEventListener('click', function(e) {
+        if (
+            sidebarProfileMenu &&
+            !e.target.closest('#sidebarProfileMenu') &&
+            !e.target.closest('#sidebarProfileMenuBtn')
+        ) {
+            hideSidebarProfileMenu();
+        }
+    });
 
     // Settings modal close buttons
-    if (settingsBackBtn) {
-        settingsBackBtn.addEventListener('click', hideUserSettings);
-    }
-    if (settingsCloseBtn) {
-        settingsCloseBtn.addEventListener('click', hideUserSettings);
-    }
+    addListenerIfExists(settingsBackBtn, 'click', hideUserSettings);
+    addListenerIfExists(settingsCloseBtn, 'click', hideUserSettings);
     if (userSettingsModal) {
         userSettingsModal.addEventListener('click', function(e) {
             if (e.target === userSettingsModal) {
@@ -2933,12 +3234,8 @@ function initializeEventListeners() {
     }
 
     // Edit profile modal close buttons
-    if (editProfileBackBtn) {
-        editProfileBackBtn.addEventListener('click', hideEditProfile);
-    }
-    if (editProfileSaveBtn) {
-        editProfileSaveBtn.addEventListener('click', saveProfileChanges);
-    }
+    addListenerIfExists(editProfileBackBtn, 'click', hideEditProfile);
+    addListenerIfExists(editProfileSaveBtn, 'click', saveProfileChanges);
     if (editProfileModal) {
         editProfileModal.addEventListener('click', function(e) {
             if (e.target === editProfileModal) {
@@ -2949,19 +3246,17 @@ function initializeEventListeners() {
 
     // Chat header click for profile
     const chatUserInfo = document.querySelector('.chat-user-info');
-    chatUserInfo.addEventListener('click', function(e) {
-        if (!e.target.closest('.back-btn')) {
-            showProfileModal();
-        }
-    });
+    if (chatUserInfo) {
+        chatUserInfo.addEventListener('click', function(e) {
+            if (!e.target.closest('.back-btn')) {
+                showProfileModal();
+            }
+        });
+    }
 
     // Profile modal close buttons
-    if (profileCloseBtn) {
-        profileCloseBtn.addEventListener('click', hideProfileModal);
-    }
-    if (profileBackBtn) {
-        profileBackBtn.addEventListener('click', hideProfileModal);
-    }
+    addListenerIfExists(profileCloseBtn, 'click', hideProfileModal);
+    addListenerIfExists(profileBackBtn, 'click', hideProfileModal);
     if (profileModal) {
         profileModal.addEventListener('click', function(e) {
             if (e.target === profileModal) {
@@ -2971,172 +3266,203 @@ function initializeEventListeners() {
     }
 
     // Chat menu
-    chatMenuBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleChatMenu();
-    });
+    if (chatMenuBtn) {
+        chatMenuBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleChatMenu();
+        });
+    }
 
-    clearChatBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        clearChat();
-        chatDropdownMenu.classList.remove('show');
-    });
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            clearChat();
+            chatDropdownMenu.classList.remove('show');
+        });
+    }
 
-    closeChatBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        closeChat();
-        chatDropdownMenu.classList.remove('show');
-    });
+    if (closeChatBtn) {
+        closeChatBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            closeChat();
+            chatDropdownMenu.classList.remove('show');
+        });
+    }
 
     // Modal event listeners
-    clearChatCancel.addEventListener('click', () => hideModal(clearChatModal));
-    clearChatConfirm.addEventListener('click', confirmClearChat);
-    closeChatCancel.addEventListener('click', () => hideModal(closeChatModal));
-    closeChatConfirm.addEventListener('click', confirmCloseChat);
+    addListenerIfExists(clearChatCancel, 'click', () => hideModal(clearChatModal));
+    addListenerIfExists(clearChatConfirm, 'click', confirmClearChat);
+    addListenerIfExists(closeChatCancel, 'click', () => hideModal(closeChatModal));
+    addListenerIfExists(closeChatConfirm, 'click', confirmCloseChat);
 
-    // Close modals when clicking overlay
-    clearChatModal.addEventListener('click', function(e) {
-        if (e.target === clearChatModal) {
-            hideModal(clearChatModal);
-        }
-    });
+    if (clearChatModal) {
+        clearChatModal.addEventListener('click', function(e) {
+            if (e.target === clearChatModal) {
+                hideModal(clearChatModal);
+            }
+        });
+    }
 
-    closeChatModal.addEventListener('click', function(e) {
-        if (e.target === closeChatModal) {
-            hideModal(closeChatModal);
-        }
-    });
+    if (closeChatModal) {
+        closeChatModal.addEventListener('click', function(e) {
+            if (e.target === closeChatModal) {
+                hideModal(closeChatModal);
+            }
+        });
+    }
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!chatMenuBtn.contains(e.target) && !chatDropdownMenu.contains(e.target)) {
-            chatDropdownMenu.classList.remove('show');
-        }
-        if (!contextMenu.contains(e.target)) {
-            contextMenu.style.display = 'none';
-        }
-    });
+    if (chatMenuBtn && chatDropdownMenu) {
+        document.addEventListener('click', function(e) {
+            if (!chatMenuBtn.contains(e.target) && !chatDropdownMenu.contains(e.target)) {
+                chatDropdownMenu.classList.remove('show');
+            }
+            if (contextMenu && !contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+            }
+        });
+    }
 
     // Chat item event listeners
     const chatItems = document.querySelectorAll('.chat-item');
-    chatItems.forEach(item => {
-        item.removeEventListener('click', handleChatClick);
-        item.removeEventListener('touchstart', handleChatClick);
-        
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleChatClick(this);
+    if (chatItems.length) {
+        chatItems.forEach(item => {
+            item.removeEventListener('click', handleChatClick);
+            item.removeEventListener('touchstart', handleChatClick);
+            
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleChatClick(this);
+            });
+            
+            item.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleChatClick(this);
+            }, { passive: false });
         });
-        
-        item.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleChatClick(this);
-        }, { passive: false });
-    });
+    }
 
     // Back button
-    backBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        goBackToChats();
-    });
+    if (backBtn) {
+        backBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            goBackToChats();
+        });
 
-    backBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        goBackToChats();
-    }, { passive: false });
+        backBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            goBackToChats();
+        }, { passive: false });
+    }
 
     // Search toggle button
-    searchToggleBtn.addEventListener('click', function(e) {
+    addListenerIfExists(searchToggleBtn, 'click', function(e) {
         e.preventDefault();
         toggleChatSearch();
     });
 
     // Close search button
-    closeSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(closeSearchBtn, 'click', function(e) {
         e.preventDefault();
         closeChatSearch();
     });
 
     // Search navigation buttons
-    prevSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(prevSearchBtn, 'click', function(e) {
         e.preventDefault();
         navigateSearch('prev');
     });
 
-    nextSearchBtn.addEventListener('click', function(e) {
+    addListenerIfExists(nextSearchBtn, 'click', function(e) {
         e.preventDefault();
         navigateSearch('next');
     });
 
     // Send button
-    sendBtn.addEventListener('click', function(e) {
+    addListenerIfExists(sendBtn, 'click', function(e) {
         e.preventDefault();
         sendMessage();
     });
 
     // Message input
-    messageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    if (messageInput) {
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    }
 
     // Chat search input
-    chatSearchInput.addEventListener('input', (e) => {
-        searchInChat(e.target.value);
-    });
+    if (chatSearchInput) {
+        chatSearchInput.addEventListener('input', (e) => {
+            searchInChat(e.target.value);
+        });
 
-    chatSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            if (e.shiftKey) {
-                navigateSearch('prev');
-            } else {
-                navigateSearch('next');
+        chatSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    navigateSearch('prev');
+                } else {
+                    navigateSearch('next');
+                }
+            } else if (e.key === 'Escape') {
+                closeChatSearch();
             }
-        } else if (e.key === 'Escape') {
-            closeChatSearch();
-        }
-    });
+        });
+    }
 
     // File input
-    fileInput.addEventListener('change', handleFileSelect);
+    addListenerIfExists(fileInput, 'change', handleFileSelect);
+
+    // PM emoji picker
+    setupPmEmojiPicker();
 
     // Reply bar close
-    replyBarClose.addEventListener('click', closeReplyBar);
+    addListenerIfExists(replyBarClose, 'click', closeReplyBar);
 
     // Context menu events
-    document.getElementById('replyOption').addEventListener('click', handleReply);
-    document.getElementById('editOption').addEventListener('click', handleEdit);
-    document.getElementById('copyOption').addEventListener('click', handleCopy);
-    document.getElementById('deleteOption').addEventListener('click', handleDelete);
+    const replyOption = document.getElementById('replyOption');
+    const editOption = document.getElementById('editOption');
+    const copyOption = document.getElementById('copyOption');
+    const deleteOption = document.getElementById('deleteOption');
+    if (replyOption) replyOption.addEventListener('click', handleReply);
+    if (editOption) editOption.addEventListener('click', handleEdit);
+    if (copyOption) copyOption.addEventListener('click', handleCopy);
+    if (deleteOption) deleteOption.addEventListener('click', handleDelete);
 
     // Message action buttons (arrow icons)
-    chatMessages.addEventListener('click', handleMessageActionClick);
+    if (chatMessages) {
+        chatMessages.addEventListener('click', handleMessageActionClick);
+    }
 
     // Sidebar search
     const searchInput = document.querySelector('.search-input');
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const chatItems = document.querySelectorAll('.chat-item');
-        
-        chatItems.forEach(item => {
-            const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
-            const lastMessage = item.querySelector('.last-message').textContent.toLowerCase();
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const chatItems = document.querySelectorAll('.chat-item');
             
-            if (chatName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
-                item.style.display = 'flex';
-            } else {
-                item.style.display = 'none';
-            }
+            chatItems.forEach(item => {
+                const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
+                const lastMessage = item.querySelector('.last-message').textContent.toLowerCase();
+                
+                if (chatName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
         });
-    });
+    }
+
 }
 
 
@@ -3151,8 +3477,15 @@ function handleMessageActionClick(e) {
             selectedMessage = messageElement;
             const rect = e.target.closest('.message-actions-btn').getBoundingClientRect();
             const isSentMessage = messageElement.classList.contains('sent');
+            const editOption = document.getElementById('editOption');
+            const deleteOption = document.getElementById('deleteOption');
             
-            document.getElementById('editOption').style.display = isSentMessage ? 'block' : 'none';
+            if (editOption) {
+                editOption.style.display = isSentMessage ? 'flex' : 'none';
+            }
+            if (deleteOption) {
+                deleteOption.style.display = isSentMessage ? 'flex' : 'none';
+            }
             
             contextMenu.style.display = 'block';
             contextMenu.style.left = (rect.left - 75) + 'px';
@@ -3192,7 +3525,10 @@ function handleReply() {
 function handleEdit() {
     if (selectedMessage && selectedMessage.classList.contains('sent')) {
         const messageContent = selectedMessage.querySelector('.message-content');
-        const originalText = messageContent.textContent;
+        const originalText = messageContent.textContent.replace(/edited\s*$/, '').trim();
+        const messageId = selectedMessage.dataset.messageId;
+        const otherUser = activeChatUser;
+        const currentUser = getLoggedInUsername();
         
         selectedMessage.classList.add('editing');
         
@@ -3218,9 +3554,39 @@ function handleEdit() {
         saveBtn.addEventListener('click', () => {
             const newText = editInput.value.trim();
             if (newText && newText !== originalText) {
-                messageContent.innerHTML = newText + '<span class="edited-label">edited</span>';
-                updateMessageInData(selectedMessage.dataset.messageId, newText);
-                showNotification('Message edited');
+                if (!messageId || !otherUser || !currentUser) {
+                    showNotification('Unable to edit message');
+                    finishEditing();
+                    return;
+                }
+
+                fetch('/chatapp/edit-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: 'currentUser=' + encodeURIComponent(currentUser)
+                        + '&otherUser=' + encodeURIComponent(otherUser)
+                        + '&messageId=' + encodeURIComponent(messageId)
+                        + '&message=' + encodeURIComponent(newText)
+                })
+                    .then(response => response.json().then(body => ({ status: response.status, body: body })))
+                    .then(result => {
+                        if (result.status >= 400 || !result.body || result.body.success !== true) {
+                            throw new Error(result.body && result.body.error ? result.body.error : 'Unable to edit message');
+                        }
+
+                        updateMessageElementContent(selectedMessage, newText, true);
+                        updateMessageInData(messageId, newText);
+                        loadRecentChats();
+                        showNotification('Message edited');
+                    })
+                    .catch(error => {
+                        console.error('Error editing message:', error);
+                        showNotification(error.message || 'Unable to edit message');
+                    })
+                    .finally(finishEditing);
+                return;
             }
             finishEditing();
         });
@@ -3255,22 +3621,59 @@ function handleCopy() {
 }
 
 function handleDelete() {
-    if (selectedMessage) {
-        const messageId = selectedMessage.dataset.messageId;
-        selectedMessage.style.animation = 'messageSlide 0.3s ease-out reverse';
-        
-        setTimeout(() => {
-            selectedMessage.remove();
-            removeMessageFromData(messageId);
-            showNotification('Message deleted');
-            
-            const remainingMessages = chatMessages.querySelectorAll('.message');
-            if (remainingMessages.length === 0) {
-                showEmptyChatState();
-            }
-        }, 300);
+    if (!selectedMessage) {
+        if (contextMenu) contextMenu.style.display = 'none';
+        return;
     }
-    contextMenu.style.display = 'none';
+
+    const messageElement = selectedMessage;
+    const messageId = messageElement.dataset.messageId;
+    const messageKey = messageElement.dataset.messageKey || messageId;
+    const otherUser = activeChatUser;
+    const currentUser = getLoggedInUsername();
+
+    if (contextMenu) {
+        contextMenu.style.display = 'none';
+    }
+
+    if (!messageId || !otherUser || !currentUser) {
+        showNotification('Unable to delete message');
+        return;
+    }
+
+    fetch('/chatapp/delete-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'currentUser=' + encodeURIComponent(currentUser)
+            + '&otherUser=' + encodeURIComponent(otherUser)
+            + '&messageId=' + encodeURIComponent(messageId)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Unable to delete message');
+            }
+
+            messageElement.style.animation = 'messageSlide 0.3s ease-out reverse';
+            setTimeout(() => {
+                messageElement.remove();
+                removeMessageFromData(messageId);
+                removeRenderedConversationMessage(otherUser, messageKey);
+                loadRecentChats();
+                showNotification('Message deleted');
+
+                const remainingMessages = chatMessages.querySelectorAll('.message');
+                if (remainingMessages.length === 0) {
+                    showEmptyChatState();
+                }
+            }, 300);
+        })
+        .catch(error => {
+            console.error('Error deleting message:', error);
+            showNotification(error.message || 'Unable to delete message');
+        });
 }
 
 // Reply bar functions
@@ -3358,8 +3761,8 @@ function getFileIcon(fileType) {
 // Data management functions
 function updateMessageInData(messageId, newContent) {
     const currentChatName = chatName.textContent;
-    const messages = currentChatData.messages[currentChatName];
-    const message = messages.find(msg => msg.id == messageId);
+    const messages = currentChatData.messages[currentChatName] || [];
+    const message = messages.find(msg => msg.id == messageId || msg.clientMessageId == messageId);
     if (message) {
         message.content = newContent;
         message.edited = true;
@@ -3368,11 +3771,54 @@ function updateMessageInData(messageId, newContent) {
 
 function removeMessageFromData(messageId) {
     const currentChatName = chatName.textContent;
-    const messages = currentChatData.messages[currentChatName];
-    const index = messages.findIndex(msg => msg.id == messageId);
+    const messages = currentChatData.messages[currentChatName] || [];
+    const index = messages.findIndex(msg => msg.id == messageId || msg.clientMessageId == messageId);
     if (index > -1) {
         messages.splice(index, 1);
     }
+}
+
+function getConversationMessageKey(message) {
+    if (!message) {
+        return '';
+    }
+
+    if (message.messageId) {
+        return 'server:' + message.messageId;
+    }
+
+    if (message.id) {
+        return String(message.id).indexOf('cmid-') === 0 ? 'client:' + message.id : 'server:' + message.id;
+    }
+
+    if (message.clientMessageId) {
+        return 'client:' + message.clientMessageId;
+    }
+
+    return 'sig:' + [message.sender || '', message.receiver || '', message.timestamp || '', message.message || ''].join('|');
+}
+
+function getConversationRenderedSet(userName) {
+    if (!renderedMessageKeysByConversation[userName]) {
+        renderedMessageKeysByConversation[userName] = new Set();
+    }
+    return renderedMessageKeysByConversation[userName];
+}
+
+function resetConversationRenderState(userName) {
+    renderedMessageKeysByConversation[userName] = new Set();
+}
+
+function isConversationMessageRendered(userName, messageKey) {
+    return getConversationRenderedSet(userName).has(messageKey);
+}
+
+function markConversationMessageRendered(userName, messageKey) {
+    getConversationRenderedSet(userName).add(messageKey);
+}
+
+function removeRenderedConversationMessage(userName, messageKey) {
+    getConversationRenderedSet(userName).delete(messageKey);
 }
 
 function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
@@ -3385,7 +3831,9 @@ function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
         id: messageId,
         type: isSent ? 'sent' : 'received',
         content: content,
-        time: time
+        time: time,
+        clientMessageId: typeof messageId === 'string' && messageId.indexOf('cmid-') === 0 ? messageId : '',
+        edited: false
     };
     
     if (replyTo) {
@@ -3393,6 +3841,106 @@ function saveMessageToData(content, isSent, time, messageId, replyTo = null) {
     }
     
     currentChatData.messages[currentChatName].push(messageData);
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function buildMessageContentHtml(text, edited) {
+    return escapeHtml(text) + (edited ? '<span class="edited-label">edited</span>' : '');
+}
+
+function updateMessageElementContent(messageElement, text, edited) {
+    if (!messageElement) {
+        return;
+    }
+
+    const contentElement = messageElement.querySelector('.message-content');
+    if (contentElement) {
+        contentElement.innerHTML = buildMessageContentHtml(text, edited);
+    }
+}
+
+function replaceRenderedConversationKey(userName, oldKey, newKey) {
+    if (!userName || !oldKey || !newKey || oldKey === newKey) {
+        return;
+    }
+
+    removeRenderedConversationMessage(userName, oldKey);
+    markConversationMessageRendered(userName, newKey);
+}
+
+function reconcileOptimisticMessage(clientMessageId, serverMessageId) {
+    if (!clientMessageId || !serverMessageId) {
+        return;
+    }
+
+    const clientKey = 'client:' + clientMessageId;
+    const serverKey = 'server:' + serverMessageId;
+    const messageElement = chatMessages
+        ? chatMessages.querySelector('[data-message-id="' + clientMessageId + '"], [data-message-key="' + clientKey + '"]')
+        : null;
+
+    if (messageElement) {
+        messageElement.setAttribute('data-message-id', serverMessageId);
+        messageElement.setAttribute('data-message-key', serverKey);
+    }
+
+    const currentChatName = chatName && chatName.textContent ? chatName.textContent : '';
+    const messages = currentChatData.messages[currentChatName] || [];
+    const message = messages.find(msg => msg.id == clientMessageId || msg.clientMessageId == clientMessageId);
+    if (message) {
+        message.id = serverMessageId;
+        message.clientMessageId = clientMessageId;
+    }
+
+    replaceRenderedConversationKey(activeChatUser, clientKey, serverKey);
+}
+
+function findMessageElementByServerId(messageId) {
+    if (!chatMessages || !messageId) {
+        return null;
+    }
+    return chatMessages.querySelector('[data-message-id="' + messageId + '"], [data-message-key="server:' + messageId + '"]');
+}
+
+function applyIncomingMessageEdit(messageId, newText) {
+    if (!messageId) {
+        return;
+    }
+
+    const messageElement = findMessageElementByServerId(messageId);
+    if (messageElement) {
+        updateMessageElementContent(messageElement, newText, true);
+    }
+
+    updateMessageInData(messageId, newText);
+    loadRecentChats();
+}
+
+function applyIncomingMessageDelete(messageId) {
+    if (!messageId) {
+        return;
+    }
+
+    const messageElement = findMessageElementByServerId(messageId);
+    if (messageElement) {
+        messageElement.remove();
+    }
+
+    removeMessageFromData(messageId);
+    removeRenderedConversationMessage(activeChatUser, 'server:' + messageId);
+    loadRecentChats();
+
+    if (chatMessages && chatMessages.querySelectorAll('.message').length === 0) {
+        showEmptyChatState();
+    }
 }
 
 // Handle chat item click
@@ -3407,31 +3955,76 @@ function handleChatClick(element) {
     }
 }
 
+function hideGroupChatOverlay() {
+    const container = document.getElementById('groupChatContainer');
+    if (!container || container.style.display === 'none') {
+        return;
+    }
+
+    if (typeof hideGroupChatModal === 'function') {
+        hideGroupChatModal();
+        return;
+    }
+
+    container.style.display = 'none';
+}
+
 // Open chat function
 // Handle chat item click to toggle between chat list and messages on mobile
 function openChat(userName) {
-    const isMobile = window.innerWidth < 768; // Bootstrap's breakpoint for mobile
-    const chatNameElement = document.getElementById('chatName');
-    const chatMessagesElement = document.getElementById('chatMessages');
-    const sidebarElement = document.getElementById('sidebar');
-    const mainChatElement = document.getElementById('mainChat');
-
-    // Update chat details
-    chatNameElement.innerText = userName;
-    chatMessagesElement.innerHTML = `
-        <div class="message received">
-            <div class="message-bubble">
-                <div class="message-content">Hey! How are you doing today? 😊</div>
-                <div class="message-time">2:30 PM</div>
-            </div>
-        </div>
-    `;
-
-    if (isMobile) {
-        // Hide sidebar and show main chat on mobile
-        sidebarElement.classList.add('d-none');
-        mainChatElement.classList.add('active');
+    if (!userName) {
+        return;
     }
+
+    clearIncomingPopupNotifications();
+
+    hideGroupChatOverlay();
+
+    // Ensure only one selection type is active at a time.
+    if (typeof groupChatState !== 'undefined' && groupChatState) {
+        groupChatState.activeRoomName = null;
+    }
+
+    activeChatUser = userName;
+    displayedConversationUser = userName;
+
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Tap to chat';
+    }
+    if (chatAvatar) {
+        chatAvatar.innerText = userName.substring(0, 2).toUpperCase();
+    }
+
+    if (welcomeScreen && chatInterface) {
+        welcomeScreen.style.display = 'none';
+        chatInterface.style.display = 'flex';
+    }
+
+    if (mainChat) {
+        mainChat.classList.remove('collapsed');
+    }
+    if (sidebar) {
+        sidebar.classList.remove('expanded');
+    }
+
+    if (isMobileDevice()) {
+        if (sidebar) sidebar.classList.add('hide');
+        if (mainChat) mainChat.classList.add('show');
+    }
+
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const nameElement = item.querySelector('.chat-name');
+        item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
+    });
+
+    markConversationRead(userName).finally(() => {
+        loadRecentChats();
+    });
+    loadConversationMessages(userName, true);
+    startActiveChatSync();
 }
 
 // Handle back button click to return to chat list on mobile
@@ -3458,6 +4051,7 @@ function loadChatMessages(chatName) {
         messages_data.forEach(msg => {
             addMessageToChat(msg.content, msg.type === 'sent', msg.time, false, msg.id, msg.replyTo);
         });
+        
     } else {
         showEmptyChatState();
     }
@@ -3465,22 +4059,41 @@ function loadChatMessages(chatName) {
 
 // Go back to chats
 function goBackToChats() {
-    if (isMobileDevice()) {
-        sidebar.classList.remove('hide');
-        mainChat.classList.remove('show');
-        
-        setTimeout(() => {
-            chatInterface.style.display = 'none';
-            welcomeScreen.style.display = 'flex';
-        }, 300);
-        
-        closeChatSearch();
-        closeReplyBar();
+    if (!isMobileDevice()) {
+        showRecentChatsPanel();
+        return;
+    }
+
+    sidebar.classList.remove('hide');
+    mainChat.classList.remove('show');
+
+    setTimeout(() => {
+        showRecentChatsPanel();
+    }, 300);
+
+    if (chatDropdownMenu) {
         chatDropdownMenu.classList.remove('show');
-        
-        document.querySelectorAll('.chat-item').forEach(item => {
-            item.classList.remove('active');
-        });
+    }
+}
+
+function startActiveChatSync() {
+    stopActiveChatSync();
+
+    if (!activeChatUser) {
+        return;
+    }
+
+    activeChatSyncTimer = setInterval(() => {
+        if (activeChatUser && (document.hidden || !isChatSocketReady)) {
+            loadConversationMessages(activeChatUser, false);
+        }
+    }, 6000);
+}
+
+function stopActiveChatSync() {
+    if (activeChatSyncTimer) {
+        clearInterval(activeChatSyncTimer);
+        activeChatSyncTimer = null;
     }
 }
 
@@ -3630,6 +4243,64 @@ function updateSearchCount() {
     }
 }
 
+function insertEmojiToInput(inputElement, emoji) {
+    if (!inputElement || !emoji) {
+        return;
+    }
+
+    const start = typeof inputElement.selectionStart === 'number' ? inputElement.selectionStart : inputElement.value.length;
+    const end = typeof inputElement.selectionEnd === 'number' ? inputElement.selectionEnd : inputElement.value.length;
+    const value = inputElement.value || '';
+
+    inputElement.value = value.slice(0, start) + emoji + value.slice(end);
+    const cursor = start + emoji.length;
+    inputElement.focus();
+    inputElement.setSelectionRange(cursor, cursor);
+}
+
+function buildEmojiPicker(pickerElement, inputElement, emojiSet = DEFAULT_EMOJI_SET) {
+    if (!pickerElement || !inputElement) {
+        return;
+    }
+
+    pickerElement.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'emoji-picker-grid';
+
+    emojiSet.forEach(emoji => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'emoji-picker-item';
+        btn.textContent = emoji;
+        btn.addEventListener('click', function() {
+            insertEmojiToInput(inputElement, emoji);
+        });
+        grid.appendChild(btn);
+    });
+
+    pickerElement.appendChild(grid);
+}
+
+function setupPmEmojiPicker() {
+    if (!pmEmojiBtn || !pmEmojiPicker || !messageInput) {
+        return;
+    }
+
+    buildEmojiPicker(pmEmojiPicker, messageInput);
+
+    pmEmojiBtn.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        pmEmojiPicker.style.display = pmEmojiPicker.style.display === 'block' ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', function(event) {
+        if (!pmEmojiPicker.contains(event.target) && event.target !== pmEmojiBtn) {
+            pmEmojiPicker.style.display = 'none';
+        }
+    });
+}
+
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -3658,17 +4329,19 @@ function addMessage(text, isSent = true) {
     }
 }
 
-function addMessageToChat(text, isSent, time, animate = true, messageId = null, replyTo = null) {
+function addMessageToChat(text, isSent, time, animate = true, messageId = null, replyTo = null, edited = false, messageKey = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
     if (messageId) {
         messageDiv.setAttribute('data-message-id', messageId);
+        messageDiv.setAttribute('data-message-key', messageKey || messageId);
     }
     if (animate) {
         messageDiv.style.animation = 'messageSlide 0.3s ease-out';
     }
     
-    const statusIcon = isSent ? '<i class="fas fa-check-double message-status"></i>' : '';
+    const status = arguments.length > 8 ? arguments[8] : 'delivered';
+    const statusIcon = isSent ? renderMessageStatusIcon(status) : '';
     
     let replyHtml = '';
     if (replyTo) {
@@ -3694,7 +4367,7 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
             <div class="message-bubble">
                 ${actionsHtml}
                 ${replyHtml}
-                <div class="message-content">${text}</div>
+                <div class="message-content">${buildMessageContentHtml(text, edited)}</div>
                 <div class="message-time">
                     ${time}
                     ${statusIcon}
@@ -3705,7 +4378,7 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
         messageDiv.innerHTML = `
             <div class="message-bubble">
                 ${replyHtml}
-                <div class="message-content">${text}</div>
+                <div class="message-content">${buildMessageContentHtml(text, edited)}</div>
                 <div class="message-time">${time}</div>
                  ${actionsHtml}
             </div>
@@ -3719,43 +4392,453 @@ function addMessageToChat(text, isSent, time, animate = true, messageId = null, 
     }
 }
 
+function renderMessageStatusIcon(status) {
+    const normalized = String(status || 'delivered').toLowerCase();
+    if (normalized === 'sent') {
+        return '<i class="fas fa-check message-status status-sent"></i>';
+    }
+    if (normalized === 'read') {
+        return '<i class="fas fa-check-double message-status status-read"></i>';
+    }
+    return '<i class="fas fa-check-double message-status status-delivered"></i>';
+}
+
+function updateMessageStatusById(messageId, status) {
+    if (!chatMessages || !messageId) {
+        return;
+    }
+
+    const msgElement = chatMessages.querySelector('[data-message-id="' + messageId + '"]');
+    if (!msgElement) {
+        return;
+    }
+
+    const timeElement = msgElement.querySelector('.message-time');
+    if (!timeElement) {
+        return;
+    }
+
+    const currentStatus = timeElement.querySelector('.message-status');
+    const normalized = String(status || 'delivered').toLowerCase();
+
+    if (currentStatus) {
+        currentStatus.classList.remove('status-sent', 'status-delivered', 'status-read', 'fa-check', 'fa-check-double');
+        if (normalized === 'sent') {
+            currentStatus.classList.add('fa-check', 'status-sent');
+        } else if (normalized === 'read') {
+            currentStatus.classList.add('fa-check-double', 'status-read');
+        } else {
+            currentStatus.classList.add('fa-check-double', 'status-delivered');
+        }
+    } else {
+        timeElement.insertAdjacentHTML('beforeend', renderMessageStatusIcon(normalized));
+    }
+}
+
+function markVisibleSentMessagesAsReadForUser(userName) {
+    if (!chatMessages || !userName || activeChatUser !== userName) {
+        return;
+    }
+
+    const sentMessages = chatMessages.querySelectorAll('.message.sent [data-message-id], .message.sent[data-message-id]');
+    sentMessages.forEach(el => {
+        const messageElement = el.classList && el.classList.contains('message') ? el : el.closest('.message');
+        if (!messageElement) {
+            return;
+        }
+        const id = messageElement.getAttribute('data-message-id');
+        if (id) {
+            updateMessageStatusById(id, 'read');
+        }
+    });
+}
+
 function sendMessage() {
     const text = messageInput.value.trim();
-    if (text) {
-        addMessage(text, true);
-        messageInput.value = '';
-        
-        typingIndicator.style.display = 'flex';
-        
-        setTimeout(() => {
-            typingIndicator.style.display = 'none';
-            const responses = [
-                "That's interesting! Tell me more. 🤔",
-                "I completely agree with you! 👍",
-                "Thanks for sharing that with me. 😊",
-                "That sounds like a great idea! 💡",
-                "I'll definitely consider that. 🤝",
-                "Awesome! Let's do it! 🚀",
-                "Haha, that's funny! 😂",
-                "Sure thing! No problem. ✅",
-                "Interesting perspective! 🧠",
-                "I love that idea! ❤️",
-                "You're absolutely right! 💯",
-                "That makes perfect sense. 🎯"
-            ];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            addMessage(randomResponse, false);
-        }, Math.random() * 2000 + 1000);
+    const sender = getLoggedInUsername();
+
+    if (!text) {
+        return;
     }
+
+    if (!sender) {
+        showNotification('Login session missing. Please re-login.');
+        return;
+    }
+
+    if (!activeChatUser) {
+        showNotification('Select a chat user first.');
+        return;
+    }
+
+    const clientMessageId = 'cmid-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    const optimisticTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(text, true, optimisticTime, true, clientMessageId, null, false, null, 'sent');
+    saveMessageToData(text, true, optimisticTime, clientMessageId);
+    markConversationMessageRendered(activeChatUser, 'client:' + clientMessageId);
+    messageInput.value = '';
+
+    fetch('/chatapp/send-message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: 'sender=' + encodeURIComponent(sender)
+            + '&receiver=' + encodeURIComponent(activeChatUser)
+            + '&message=' + encodeURIComponent(text)
+            + '&clientMessageId=' + encodeURIComponent(clientMessageId)
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to send message (' + response.status + ')');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const serverMessageId = data.messageId || '';
+            if (serverMessageId) {
+                reconcileOptimisticMessage(clientMessageId, serverMessageId);
+                markConversationMessageRendered(activeChatUser, 'server:' + serverMessageId);
+                updateMessageStatusById(serverMessageId, data.delivered === false ? 'sent' : 'delivered');
+            } else {
+                updateMessageStatusById(clientMessageId, data.delivered === false ? 'sent' : 'delivered');
+            }
+
+            sendRealtimeMessage(sender, activeChatUser, text, data.timestamp, serverMessageId, clientMessageId);
+            loadRecentChats();
+        })
+        .catch(error => {
+            console.error('Error sending message:', error);
+            removeMessageFromData(clientMessageId);
+            removeRenderedConversationMessage(activeChatUser, 'client:' + clientMessageId);
+            const failedMessage = chatMessages.querySelector('[data-message-key="' + clientMessageId + '"]');
+            if (failedMessage) {
+                failedMessage.remove();
+            }
+            showNotification('Failed to send message');
+        });
+}
+
+function initChatSocket() {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || (chatSocket && (chatSocket.readyState === WebSocket.OPEN || chatSocket.readyState === WebSocket.CONNECTING))) {
+        return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    chatSocket = new WebSocket(protocol + '//' + window.location.host + '/chatapp/ws/chat?username=' + encodeURIComponent(currentUser));
+
+    chatSocket.addEventListener('open', () => {
+        isChatSocketReady = true;
+        console.log('Chat socket connected for', currentUser);
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            const authPayload = {
+                type: 'auth',
+                username: currentUser
+            };
+            chatSocket.send(JSON.stringify(authPayload));
+        }
+    });
+
+    chatSocket.addEventListener('message', (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (!data || !data.type) {
+                return;
+            }
+
+            markRealtimeSync('ws');
+
+            const loggedIn = getLoggedInUsername();
+            if (data.receiver !== loggedIn) {
+                return;
+            }
+
+            if (data.type === 'edit') {
+                if (activeChatUser === data.sender) {
+                    applyIncomingMessageEdit(data.messageId, data.message || '');
+                } else {
+                    loadRecentChats();
+                }
+                return;
+            }
+
+            if (data.type === 'read') {
+                if (activeChatUser === data.sender) {
+                    markVisibleSentMessagesAsReadForUser(data.sender);
+                }
+                return;
+            }
+
+            if (data.type === 'delete') {
+                if (activeChatUser === data.sender) {
+                    applyIncomingMessageDelete(data.messageId);
+                } else {
+                    loadRecentChats();
+                }
+                return;
+            }
+
+            if (data.type !== 'chat') {
+                return;
+            }
+
+            const fromUser = data.sender;
+            const text = data.message || '';
+            const time = formatMessageTime(data.timestamp);
+            const notificationKey = ['direct', data.messageId || '', data.clientMessageId || '', fromUser, loggedIn, text, data.timestamp || ''].join('|');
+
+            const messageData = {
+                id: data.messageId || data.clientMessageId || data.timestamp || ('ws-' + Date.now()),
+                content: text,
+                time: time,
+                clientMessageId: data.clientMessageId || ''
+            };
+
+            if (!currentChatData.messages[fromUser]) {
+                currentChatData.messages[fromUser] = [];
+            }
+
+            if (activeChatUser === fromUser) {
+                const conversationKey = getConversationMessageKey(data);
+                appendConversationMessage(fromUser, messageData, false, true, conversationKey);
+                markConversationRead(fromUser).finally(() => {
+                    loadRecentChats();
+                });
+                notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
+            } else {
+                saveMessageToData(text, false, time, messageData.id);
+                notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
+                loadRecentChats();
+            }
+        } catch (err) {
+            console.error('WebSocket message parse error:', err);
+        }
+    });
+
+    chatSocket.addEventListener('close', () => {
+        isChatSocketReady = false;
+        chatSocket = null;
+        console.warn('Chat socket disconnected, fallback sync remains active');
+        setTimeout(() => {
+            initChatSocket();
+        }, 1500);
+    });
+
+    chatSocket.addEventListener('error', (err) => {
+        isChatSocketReady = false;
+        console.error('WebSocket error:', err);
+    });
+}
+
+window.addEventListener('focus', () => {
+    if (activeChatUser) {
+        loadConversationMessages(activeChatUser);
+    }
+});
+
+function sendRealtimeMessage(sender, receiver, message, timestamp, messageId, clientMessageId) {
+    if (!isChatSocketReady || !chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    const payload = {
+        type: 'chat',
+        sender: sender,
+        receiver: receiver,
+        message: message,
+        timestamp: timestamp || new Date().toISOString(),
+        messageId: messageId || '',
+        clientMessageId: clientMessageId || ''
+    };
+
+    chatSocket.send(JSON.stringify(payload));
+}
+
+function loadConversationMessages(otherUser, replaceAll = false) {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || !otherUser || !chatMessages) {
+        return;
+    }
+
+    if (isConversationFetchInFlight) {
+        return;
+    }
+
+    const distanceFromBottom = chatMessages.scrollHeight - (chatMessages.scrollTop + chatMessages.clientHeight);
+    const wasNearBottom = distanceFromBottom <= 48;
+
+    isConversationFetchInFlight = true;
+
+    const requestUrl = '/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser)
+        + '&otherUser=' + encodeURIComponent(otherUser)
+        + '&_ts=' + Date.now();
+
+    fetch(requestUrl, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load messages');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const messages = Array.isArray(data.messages) ? data.messages : [];
+
+            if (replaceAll || displayedConversationUser !== otherUser) {
+                currentChatData.messages[otherUser] = [];
+                resetConversationRenderState(otherUser);
+
+                const existing = chatMessages.querySelectorAll('.message, .empty-chat');
+                existing.forEach(item => item.remove());
+            }
+
+            if (messages.length === 0) {
+                showEmptyChatState();
+                return;
+            }
+
+            messages.forEach(msg => {
+                const messageKey = getConversationMessageKey(msg);
+                if (isConversationMessageRendered(otherUser, messageKey)) {
+                    return;
+                }
+
+                const isSent = msg.sender === currentUser;
+                const time = formatMessageTime(msg.timestamp);
+                const messageData = {
+                    id: msg.id || msg.messageId || msg.clientMessageId || messageKey,
+                    content: msg.message || '',
+                    time: time,
+                    type: isSent ? 'sent' : 'received',
+                    replyTo: msg.replyTo || null,
+                    clientMessageId: msg.clientMessageId || '',
+                    edited: Boolean(msg.edited),
+                    status: isSent ? (msg.isRead ? 'read' : 'delivered') : null
+                };
+
+                appendConversationMessage(otherUser, messageData, isSent, false, messageKey);
+
+                if (!replaceAll && !isSent) {
+                    const notificationKey = [
+                        'direct',
+                        msg.id || msg.messageId || '',
+                        msg.clientMessageId || '',
+                        msg.sender || '',
+                        currentUser,
+                        msg.message || '',
+                        msg.timestamp || ''
+                    ].join('|');
+                    notifyIncomingMessage(otherUser, msg.message || '', 'direct', notificationKey, { userName: otherUser });
+                }
+            });
+
+            if (replaceAll || displayedConversationUser !== otherUser || wasNearBottom) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+            markRealtimeSync('poll');
+        })
+        .catch(error => {
+            console.error('Error loading conversation messages:', error);
+            showEmptyChatState();
+        })
+        .finally(() => {
+            isConversationFetchInFlight = false;
+        });
+}
+
+function appendConversationMessage(conversationUser, messageData, isSent, animate, messageKey) {
+    const key = messageKey || getConversationMessageKey(messageData);
+
+    if (isConversationMessageRendered(conversationUser, key)) {
+        return false;
+    }
+
+    const emptyState = chatMessages.querySelector('.empty-chat');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    addMessageToChat(
+        messageData.content,
+        isSent,
+        messageData.time,
+        animate,
+        messageData.id || key,
+        messageData.replyTo,
+        Boolean(messageData.edited),
+        key,
+        messageData.status || (isSent ? 'delivered' : null)
+    );
+    saveMessageToData(messageData.content, isSent, messageData.time, messageData.id || key, messageData.replyTo);
+    if (Boolean(messageData.edited)) {
+        updateMessageInData(messageData.id || key, messageData.content);
+    }
+    markConversationMessageRendered(conversationUser, key);
+    return true;
+}
+
+function markConversationRead(otherUser) {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser || !otherUser) {
+        return Promise.resolve();
+    }
+
+    return fetch('/chatapp/mark-conversation-read', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: 'currentUser=' + encodeURIComponent(currentUser)
+            + '&otherUser=' + encodeURIComponent(otherUser)
+    }).catch(error => {
+        console.error('Error marking conversation as read:', error);
+    });
+}
+
+function initRealtimeBadge() {
+    return;
+}
+
+function updateRealtimeBadge(text, color) {
+    return;
+}
+
+function markRealtimeSync(source) {
+    return;
+}
+
+function formatMessageTime(timestamp) {
+    if (!timestamp) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 // Handle window resize
 window.addEventListener('resize', () => {
+    if (!sidebar || !mainChat) return;
     if (window.innerWidth > 768) {
         sidebar.classList.remove('hide');
         mainChat.classList.remove('show');
     } else {
-        if (chatInterface.style.display === 'flex') {
+        if (chatInterface && chatInterface.style.display === 'flex') {
             sidebar.classList.add('hide');
             mainChat.classList.add('show');
         } else {
@@ -3770,36 +4853,179 @@ let touchStartX = 0;
 let touchEndX = 0;
 
 function handleGesture() {
-    if (isMobileDevice() && chatInterface.style.display === 'flex') {
+    if (isMobileDevice() && chatInterface && chatInterface.style.display === 'flex') {
         if (touchEndX > touchStartX + 50) {
             goBackToChats();
         }
     }
 }
 
-chatMessages.addEventListener('touchstart', e => {
-    touchStartX = e.changedTouches[0].screenX;
-}, { passive: true });
+if (chatMessages) {
+    chatMessages.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
 
-chatMessages.addEventListener('touchend', e => {
-    touchEndX = e.changedTouches[0].screenX;
-    handleGesture();
-}, { passive: true });
+    chatMessages.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleGesture();
+    }, { passive: true });
+}
+
+// Function to load recent chats dynamically
+function loadRecentChats() {
+    const username = getLoggedInUsername(); // Get username from session or localStorage
+    
+    if (!username) {
+        console.warn("No username found. Recent chats not loaded.");
+        return;
+    }
+
+    if (recentChatsFetchInFlight) {
+        recentChatsRefreshQueued = true;
+        return;
+    }
+
+    recentChatsFetchInFlight = true;
+
+    fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}`)
+        .then(response => response.json())
+        .then(data => {
+            const chatList = document.getElementById('chatList');
+            if (!chatList) return;
+
+            chatList.innerHTML = '';
+
+            if (data.length === 0) {
+                // Show message when no recent chats
+                chatList.innerHTML = `
+                    <div class="no-chats-message">
+                        <div class="no-chats-icon">💬</div>
+                        <p>No recent chats</p>
+                        <p class="tap-to-chat">Tap to start a new chat</p>
+                    </div>
+                `;
+            } else {
+                // Populate recent chats
+                data.forEach(chat => {
+                    const chatItem = createChatItem(chat, username);
+                    chatList.appendChild(chatItem);
+                });
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching recent chats:", error);
+            const chatList = document.getElementById('chatList');
+            if (chatList) {
+                chatList.innerHTML = `<div class="chat-error">Failed to load chats</div>`;
+            }
+        })
+        .finally(() => {
+            recentChatsFetchInFlight = false;
+            if (recentChatsRefreshQueued) {
+                recentChatsRefreshQueued = false;
+                loadRecentChats();
+            }
+        });
+}
+
+function startRecentChatsAutoRefresh() {
+    if (recentChatsRefreshTimer) {
+        return;
+    }
+
+    recentChatsRefreshTimer = setInterval(() => {
+        if (document.getElementById('chatList')) {
+            loadRecentChats();
+        }
+    }, 7000);
+}
+
+// Helper function to get logged-in username
+function getLoggedInUsername() {
+    if (window.loggedInUsername && window.loggedInUsername.trim()) {
+        return window.loggedInUsername.trim();
+    }
+
+    // Try to get from session storage first
+    let username = sessionStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to get from localStorage
+    username = localStorage.getItem('username');
+    if (username) return username;
+    
+    // Try to extract from page/DOM
+    const userElement = document.getElementById('currentUsername');
+    if (userElement) return userElement.textContent;
+    
+    return null;
+}
+
+// Helper function to create a chat item element
+function createChatItem(chat, currentUser) {
+    const chatItem = document.createElement('div');
+    chatItem.className = 'chat-item';
+    
+    const displayName = (chat.name || chat.username || '').trim();
+    if (!displayName) {
+        return chatItem;
+    }
+    const isGroupRoom = Boolean(chat.isGroupRoom || chat.isGroupChat);
+    const initials = displayName.substring(0, 2).toUpperCase();
+    const lastMessage = chat.lastMessage || "No messages yet";
+    const activeGroupRoom = (typeof groupChatState !== 'undefined' && groupChatState && groupChatState.activeRoomName)
+        ? String(groupChatState.activeRoomName).trim()
+        : '';
+    const isActiveUserChat = !activeGroupRoom && displayName === activeChatUser;
+    const isActiveGroupRoom = isGroupRoom && activeGroupRoom && displayName.toLowerCase() === activeGroupRoom.toLowerCase();
+    const unreadCount = Number(chat.unreadCount || 0);
+    const shouldShowUnread = unreadCount > 0 && !(isGroupRoom ? isActiveGroupRoom : isActiveUserChat);
+    const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
+
+    if (isActiveUserChat || isActiveGroupRoom) {
+        chatItem.classList.add('active');
+    }
+    
+    chatItem.innerHTML = `
+        <div class="chat-avatar">${initials}</div>
+        <div class="chat-info">
+            <div class="chat-name">${isGroupRoom ? '🏠 ' : ''}${displayName}</div>
+            <div class="chat-preview">
+                <div class="last-message">${lastMessage.substring(0, 30)}${lastMessage.length > 30 ? '...' : ''}</div>
+                ${shouldShowUnread ? `<div class="unread-count" title="${unreadCount} unread messages">${unreadLabel}</div>` : ''}
+            </div>
+        </div>
+    `;
+
+    chatItem.onclick = () => {
+        if (isGroupRoom && typeof showGroupChatModal === 'function' && typeof openGroupRoom === 'function') {
+            showGroupChatModal();
+            openGroupRoom(displayName, chat.members || []);
+            return;
+        }
+
+        openChat(displayName, chat.conversationId);
+    };
+    return chatItem;
+}
 
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
     loadUserSettings();
     applyChatFontSize(userSettings.chat.fontSize);
+    loadRecentChats(); // Load recent chats dynamically
+    startRecentChatsAutoRefresh();
     initializeEventListeners();
+    initChatSocket();
     
     setTimeout(() => {
-        if (chatMessages.children.length > 0) {
+        if (chatMessages && chatMessages.children.length > 0) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
     }, 100);
 
-    if (isMobileDevice()) {
+    if (isMobileDevice() && chatInterface && welcomeScreen && sidebar && mainChat) {
         chatInterface.style.display = 'none';
         welcomeScreen.style.display = 'flex';
         sidebar.classList.remove('hide');
@@ -3809,7 +5035,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize on window load as backup
 window.addEventListener('load', () => {
-    if (isMobileDevice()) {
+    if (isMobileDevice() && chatInterface && welcomeScreen && sidebar && mainChat) {
         chatInterface.style.display = 'none';
         welcomeScreen.style.display = 'flex';
         sidebar.classList.remove('hide');
@@ -3906,5 +5132,6 @@ function initializeCallEventListeners() {
 }
 
 initializeCallEventListeners();
+
 
 

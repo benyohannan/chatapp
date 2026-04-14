@@ -111,6 +111,10 @@
 
 <body>
 
+<%
+    String error = request.getParameter("error");
+%>
+
 <div class="theme-toggle" onclick="toggleTheme()">🌙</div>
 
 <div class="glass-card">
@@ -118,9 +122,15 @@
     <!-- LOGIN -->
     <div id="loginForm" class="form-box active">
         <h2 class="text-center mb-4">Login</h2>
-        <form action="login" method="post">
+        <% if ("invalid_credentials".equals(error)) { %>
+            <div class="alert alert-danger" role="alert">Invalid username or password.</div>
+        <% } else if ("server".equals(error)) { %>
+            <div class="alert alert-danger" role="alert">Server error during login. Please try again.</div>
+        <% } %>
+
+        <form action="${pageContext.request.contextPath}/login" method="post">
             <div class="mb-3">
-                <input type="text" class="form-control" name="username" placeholder="Username" required>
+                <input type="text" class="form-control" name="username" placeholder="Username or Email" required>
             </div>
 
             <div class="mb-3 position-relative">
@@ -139,7 +149,7 @@
     <!-- REGISTER -->
     <div id="registerForm" class="form-box hidden">
         <h2 class="text-center mb-4">Register</h2>
-        <form action="register" method="post">
+        <form action="${pageContext.request.contextPath}/register" method="post">
             <div class="mb-3">
                 <input type="text" class="form-control" name="firstName" placeholder="First Name" required>
             </div>
