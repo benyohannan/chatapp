@@ -181,6 +181,12 @@ let lastIncomingNotificationSoundAt = 0;
 let recentChatsRefreshTimer = null;
 let recentChatsFetchInFlight = false;
 let recentChatsRefreshQueued = false;
+let pendingProfilePhotoDataUrl = null;
+let directUserMetaCache = {};
+let recentChatLocalOrder = new Map();
+let recentChatLocalPreview = new Map();
+let recentChatsRequestSeq = 0;
+const ACTIVE_SELECTION_STORAGE_KEY = 'RainChatify-active-selection';
 const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
 const DEFAULT_EMOJI_SET = [
     '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
@@ -584,6 +590,14 @@ function loadUserSettings() {
     if (saved) {
         userSettings = { ...userSettings, ...JSON.parse(saved) };
     }
+
+    const cachedProfilePhoto = localStorage.getItem('RainChatify-profile-photo');
+    if (cachedProfilePhoto) {
+        if (!userSettings.profile) {
+            userSettings.profile = {};
+        }
+        userSettings.profile.photoDataUrl = cachedProfilePhoto;
+    }
     
     const savedStatus = localStorage.getItem('RainChatify-status-data');
     if (savedStatus) {
@@ -598,7 +612,79 @@ function loadUserSettings() {
 
 // Save settings to localStorage
 function saveUserSettings() {
-    localStorage.setItem('RainChatify-user-settings', JSON.stringify(userSettings));
+    try {
+        const safeSettings = JSON.parse(JSON.stringify(userSettings));
+        if (safeSettings.profile && safeSettings.profile.photoDataUrl) {
+            delete safeSettings.profile.photoDataUrl;
+        }
+        localStorage.setItem('RainChatify-user-settings', JSON.stringify(safeSettings));
+
+        if (userSettings.profile && userSettings.profile.photoDataUrl) {
+            localStorage.setItem('RainChatify-profile-photo', userSettings.profile.photoDataUrl);
+        } else {
+            localStorage.removeItem('RainChatify-profile-photo');
+        }
+        return true;
+    } catch (error) {
+        console.error('saveUserSettings failed:', error);
+        try {
+            localStorage.removeItem('RainChatify-profile-photo');
+            const fallbackSettings = JSON.parse(JSON.stringify(userSettings));
+            if (fallbackSettings.profile && fallbackSettings.profile.photoDataUrl) {
+                delete fallbackSettings.profile.photoDataUrl;
+            }
+            localStorage.setItem('RainChatify-user-settings', JSON.stringify(fallbackSettings));
+            return false;
+        } catch (fallbackError) {
+            console.error('saveUserSettings fallback failed:', fallbackError);
+            return false;
+        }
+    }
+}
+
+function resizeProfileImageToDataUrl(file, maxDimension = 512, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        if (!file) {
+            reject(new Error('No file selected'));
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Unable to read image file'));
+        reader.onload = function(event) {
+            const image = new Image();
+            image.onerror = () => reject(new Error('Invalid image file'));
+            image.onload = function() {
+                let width = image.width;
+                let height = image.height;
+
+                if (width > height && width > maxDimension) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                } else if (height >= width && height > maxDimension) {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    reject(new Error('Unable to process image'));
+                    return;
+                }
+
+                context.drawImage(image, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataUrl);
+            };
+
+            image.src = event.target && event.target.result ? String(event.target.result) : '';
+        };
+
+        reader.readAsDataURL(file);
+    });
 }
 
 // Save status data
@@ -1407,7 +1493,7 @@ function loadStatusContent() {
             <div class="my-status-item" onclick="showMyStatusOptions()">
                 <div class="status-avatar-container">
                     <div class="status-avatar" style="background: linear-gradient(45deg, var(--green-primary), var(--green-secondary));">
-                        ${userSettings.profile.avatar}
+                        ${getProfileAvatarNodeHtml('status-avatar-image')}
                     </div>
                     ${myStatusCount > 0 ? '<div class="status-ring"></div>' : ''}
                     <div class="add-status-icon">
@@ -1901,6 +1987,99 @@ function openUserProfileSettings() {
     showUserSettings();
 }
 
+function getLoggedInUsernameSafe() {
+    return (getLoggedInUsername() || userSettings.profile.name || 'User').trim();
+}
+
+function getProfileAvatarText() {
+    const username = getLoggedInUsernameSafe();
+    return username.substring(0, 2).toUpperCase();
+}
+
+function getProfileAvatarNodeHtml(avatarClassName) {
+    if (userSettings.profile.photoDataUrl) {
+        return '<img src="' + userSettings.profile.photoDataUrl + '" alt="Profile photo" class="' + avatarClassName + '">';
+    }
+    return getProfileAvatarText();
+}
+
+function getDefaultAvatarText(name) {
+    const safeName = (name || '').trim();
+    return safeName ? safeName.substring(0, 2).toUpperCase() : '??';
+}
+
+function renderChatHeaderAvatar(name, profilePic) {
+    if (!chatAvatar) {
+        return;
+    }
+
+    const safePic = profilePic ? String(profilePic).trim() : '';
+    if (safePic) {
+        chatAvatar.innerHTML = '<img src="' + safePic + '" alt="' + (name || 'User') + '" class="chat-user-avatar-image">';
+        return;
+    }
+
+    chatAvatar.textContent = getDefaultAvatarText(name);
+}
+
+function cacheDirectUserMeta(username, meta) {
+    const key = (username || '').trim();
+    if (!key) {
+        return;
+    }
+
+    const existing = directUserMetaCache[key] || {};
+    directUserMetaCache[key] = {
+        username: key,
+        about: meta && meta.about !== undefined ? String(meta.about || '') : String(existing.about || ''),
+        profilePic: meta && meta.profilePic !== undefined ? String(meta.profilePic || '') : String(existing.profilePic || '')
+    };
+}
+
+function fetchAndCacheUserProfile(username) {
+    const key = (username || '').trim();
+    if (!key) {
+        return Promise.resolve(null);
+    }
+
+    return fetch('/chatapp/get-user-profile?username=' + encodeURIComponent(key), {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Unable to load user profile');
+            }
+            return response.json();
+        })
+        .then(data => {
+            cacheDirectUserMeta(key, {
+                about: data && data.about ? data.about : '',
+                profilePic: data && data.profilePic ? data.profilePic : ''
+            });
+            return directUserMetaCache[key];
+        })
+        .catch(error => {
+            console.warn('User profile fetch failed for', key, error);
+            return directUserMetaCache[key] || null;
+        });
+}
+
+function syncSidebarProfileCard() {
+    const sidebarProfileAvatar = document.getElementById('sidebarProfileAvatar');
+    const sidebarProfileName = document.getElementById('sidebarProfileName');
+
+    if (sidebarProfileAvatar) {
+        sidebarProfileAvatar.innerHTML = getProfileAvatarNodeHtml('sidebar-profile-avatar-image');
+    }
+
+    if (sidebarProfileName) {
+        sidebarProfileName.textContent = getLoggedInUsernameSafe();
+    }
+}
+
 function toggleSidebarProfileMenu(event) {
     if (event) {
         event.stopPropagation();
@@ -1919,6 +2098,9 @@ function hideSidebarProfileMenu() {
 
 function submitLogoutForm() {
     hideSidebarProfileMenu();
+    if (window.ZyncLoader && typeof window.ZyncLoader.show === 'function') {
+        window.ZyncLoader.show('Signing out securely');
+    }
     if (logoutForm) {
         logoutForm.submit();
     }
@@ -1926,128 +2108,103 @@ function submitLogoutForm() {
 
 // Load settings content
 function loadSettingsContent() {
+    syncSidebarProfileCard();
+    const username = getLoggedInUsernameSafe();
     const settingsHTML = `
         <div class="settings-profile-section">
             <div class="settings-profile-item" onclick="showEditProfile()">
                 <div class="settings-profile-avatar">
                     <div class="settings-avatar-bg">
-                        ${userSettings.profile.avatar}
+                        ${getProfileAvatarNodeHtml('settings-avatar-image')}
                     </div>
                 </div>
                 <div class="settings-profile-info">
-                    <div class="settings-profile-name">${userSettings.profile.name}</div>
+                    <div class="settings-profile-name">${username}</div>
                     <div class="settings-profile-about">${userSettings.profile.about}</div>
-                </div>
-                <div class="settings-profile-edit">
-                    <i class="fas fa-chevron-right"></i>
                 </div>
             </div>
         </div>
 
         <div class="settings-section">
-            <div class="settings-item" onclick="showPrivacySettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-lock"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Privacy</div>
-                    <div class="settings-subtitle">Last seen, profile photo, about</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showSecuritySettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-shield-alt"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Security</div>
-                    <div class="settings-subtitle">Two-step verification, change number</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showNotificationSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-bell"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Notifications</div>
-                    <div class="settings-subtitle">Message, group & call tones</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showChatSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-comment"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Chats</div>
-                    <div class="settings-subtitle">Theme, wallpapers, chat history</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showStorageSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-database"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Storage and data</div>
-                    <div class="settings-subtitle">Network usage, auto-download</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showLanguageSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-globe"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Language</div>
-                    <div class="settings-subtitle">English (device's language)</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
         </div>
 
         <div class="settings-section">
-            <div class="settings-item" onclick="showHelpSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-question-circle"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Help</div>
-                    <div class="settings-subtitle">Help center, contact us, terms and privacy policy</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
 
-            <div class="settings-item" onclick="showInviteSettings()">
+            <div class="settings-item settings-item-future">
                 <div class="settings-icon">
                     <i class="fas fa-user-plus"></i>
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Invite a friend</div>
-                    <div class="settings-subtitle">Share RainChatify with friends</div>
-                </div>
-                <div class="settings-arrow">
-                    <i class="fas fa-chevron-right"></i>
+                    <div class="settings-subtitle">Upcoming future updates</div>
                 </div>
             </div>
         </div>
@@ -2059,7 +2216,7 @@ function loadSettingsContent() {
                 </div>
                 <div class="settings-info">
                     <div class="settings-title">Logout</div>
-                    <div class="settings-subtitle">Sign out from RainChatify</div>
+                    <div class="settings-subtitle">Sign out from ZyncChat</div>
                 </div>
                 <div class="settings-arrow">
                     <i class="fas fa-chevron-right"></i>
@@ -2088,31 +2245,31 @@ function hideEditProfile() {
 
 // Load edit profile content
 function loadEditProfileContent() {
+    pendingProfilePhotoDataUrl = null;
+    const username = getLoggedInUsernameSafe();
     const editProfileHTML = `
         <div class="edit-profile-section">
             <div class="edit-avatar-section">
-                <div class="edit-avatar-container">
+                <div class="edit-avatar-container" id="editAvatarContainer">
                     <div class="edit-avatar-bg">
-                        ${userSettings.profile.avatar}
+                        ${getProfileAvatarNodeHtml('edit-avatar-image')}
                     </div>
                     <div class="edit-avatar-overlay">
                         <i class="fas fa-camera"></i>
                         <span>Change photo</span>
                     </div>
+                    <input type="file" id="editProfilePhotoInput" accept="image/*" style="display:none;">
                 </div>
             </div>
 
-            <div class="edit
+            <div class="edit-field-section">
                 <div class="edit-field">
-                    <label>Name</label>
+                    <label>Username</label>
                     <div class="edit-input-group">
-                        <input type="text" id="editName" value="${userSettings.profile.name}" maxlength="25">
-                        <span class="edit-field-icon">
-                            <i class="fas fa-edit"></i>
-                        </span>
+                        <input type="text" id="editUsername" value="${username}" readonly>
                     </div>
                     <div class="edit-field-info">
-                        This is not your username or pin. This name will be visible to your RainChatify contacts.
+                        Username is fixed and cannot be edited.
                     </div>
                 </div>
 
@@ -2125,42 +2282,90 @@ function loadEditProfileContent() {
                         </span>
                     </div>
                 </div>
-
-                <div class="edit-field">
-                    <label>Phone</label>
-                    <div class="edit-input-group">
-                        <input type="text" id="editPhone" value="${userSettings.profile.phone}" readonly>
-                        <span class="edit-field-icon">
-                            <i class="fas fa-lock"></i>
-                        </span>
-                    </div>
-                    <div class="edit-field-info">
-                        To change your phone number, go to Settings > Security > Change number.
-                    </div>
-                </div>
             </div>
         </div>
     `;
     
     editProfileContent.innerHTML = editProfileHTML;
+
+    const avatarContainer = document.getElementById('editAvatarContainer');
+    const photoInput = document.getElementById('editProfilePhotoInput');
+    if (avatarContainer && photoInput) {
+        avatarContainer.addEventListener('click', function() {
+            photoInput.click();
+        });
+
+        photoInput.addEventListener('change', function(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (!file.type || !file.type.startsWith('image/')) {
+                showNotification('Please select an image file', 'error');
+                photoInput.value = '';
+                return;
+            }
+
+            resizeProfileImageToDataUrl(file)
+                .then((result) => {
+                    pendingProfilePhotoDataUrl = result;
+                    const avatarBg = avatarContainer.querySelector('.edit-avatar-bg');
+                    if (avatarBg) {
+                        avatarBg.innerHTML = '<img src="' + result + '" alt="Profile photo" class="edit-avatar-image">';
+                    }
+                })
+                .catch((error) => {
+                    console.error('Image processing error:', error);
+                    showNotification('Unable to use this image. Try another one.', 'error');
+                });
+        });
+    }
 }
 
 // Save profile changes
 function saveProfileChanges() {
-    const name = document.getElementById('editName').value.trim();
-    const about = document.getElementById('editAbout').value.trim();
-    
-    if (name) {
-        userSettings.profile.name = name;
-        userSettings.profile.about = about;
-        
-        saveUserSettings();
-        hideEditProfile();
-        showNotification('Profile updated successfully');
-        loadSettingsContent();
-    } else {
-        showNotification('Name cannot be empty', 'error');
+    const aboutElement = document.getElementById('editAbout');
+    const about = aboutElement ? aboutElement.value.trim() : '';
+    const username = getLoggedInUsernameSafe();
+
+    userSettings.profile.name = username;
+    userSettings.profile.about = about;
+    userSettings.profile.avatar = getProfileAvatarText();
+    if (pendingProfilePhotoDataUrl) {
+        userSettings.profile.photoDataUrl = pendingProfilePhotoDataUrl;
     }
+
+    const localSaveOk = saveUserSettings();
+    hideEditProfile();
+    showNotification('Profile updated successfully');
+    syncSidebarProfileCard();
+    loadSettingsContent();
+
+    if (!localSaveOk) {
+        showNotification('Profile photo is large; saved with reduced local cache.', 'error');
+    }
+
+    const profilePic = userSettings.profile.photoDataUrl || '';
+    fetch('/chatapp/update-user-profile', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: 'username=' + encodeURIComponent(username)
+            + '&about=' + encodeURIComponent(about)
+            + '&profilePic=' + encodeURIComponent(profilePic)
+    })
+        .then(response => response.json().then(body => ({ status: response.status, body: body })))
+        .then(result => {
+            if (result.status >= 400 || !result.body || result.body.success !== true) {
+                throw new Error(result.body && result.body.error ? result.body.error : 'Profile sync failed');
+            }
+        })
+        .catch(error => {
+            console.error('Profile sync error:', error);
+            showNotification('Profile saved locally. Server sync failed.', 'error');
+        });
 }
 
 // Show privacy settings
@@ -2731,35 +2936,20 @@ function loadProfileContent() {
             </div>
         `;
     } else {
+        const safeProfilePic = currentChatInfo.profilePic ? String(currentChatInfo.profilePic).trim() : '';
+        const headerAvatarMarkup = safeProfilePic
+            ? `<img src="${safeProfilePic}" alt="${currentChatInfo.name}" class="profile-avatar-image">`
+            : (currentChatInfo.avatar || getDefaultAvatarText(currentChatInfo.name));
         profileHTML = `
             <div class="profile-header">
                 <div class="profile-avatar-large">
                     <div class="profile-avatar-bg" style="background: ${currentChatInfo.avatarGradient};">
-                        ${currentChatInfo.avatar}
+                        ${headerAvatarMarkup}
                     </div>
                     ${currentChatInfo.isOnline ? '<div class="online-indicator-large"></div>' : ''}
                 </div>
                 <h2 class="profile-name">${currentChatInfo.name}</h2>
-                <p class="profile-status">${currentChatInfo.status}</p>
-            </div>
-            
-            <div class="profile-section">
-                <div class="profile-section-header">
-                    <h3>About</h3>
-                </div>
-                <div class="profile-section-content">
-                    <p>${currentChatInfo.about || 'Hey there! I am using RainChatify.'}</p>
-                    <span class="about-time">Today at 3:15 PM</span>
-                </div>
-            </div>
-            
-            <div class="profile-section">
-                <div class="profile-section-header">
-                    <h3>Phone</h3>
-                </div>
-                <div class="profile-section-content">
-                    <p>${currentChatInfo.phone || '+1 234 567 8900'}</p>
-                </div>
+                <p class="profile-status">${currentChatInfo.about || 'Hey there! I am using ZyncChat.'}</p>
             </div>
             
             <div class="profile-section">
@@ -3058,6 +3248,7 @@ function showRecentChatsPanel() {
     stopActiveChatSync();
 
     resetActiveChatSelection();
+    clearPersistedActiveSelection();
 
     if (chatInterface && welcomeScreen) {
         chatInterface.style.display = 'none';
@@ -3069,6 +3260,78 @@ function showRecentChatsPanel() {
         mainChat.classList.remove('show');
         mainChat.classList.add('collapsed');
         sidebar.classList.add('expanded');
+    }
+}
+
+function persistActiveSelection(type, name) {
+    const safeType = (type || '').trim();
+    const safeName = (name || '').trim();
+    if (!safeType || !safeName) {
+        return;
+    }
+
+    const payload = JSON.stringify({ type: safeType, name: safeName });
+    try {
+        sessionStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
+        localStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
+    } catch (error) {
+        console.warn('Unable to persist active selection:', error);
+    }
+}
+
+function clearPersistedActiveSelection() {
+    try {
+        sessionStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
+        localStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
+    } catch (error) {
+        console.warn('Unable to clear active selection:', error);
+    }
+}
+
+function getPersistedActiveSelection() {
+    let raw = '';
+    try {
+        raw = sessionStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
+            || localStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
+            || '';
+    } catch (error) {
+        return null;
+    }
+
+    if (!raw) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.type || !parsed.name) {
+            return null;
+        }
+        return {
+            type: String(parsed.type).trim(),
+            name: String(parsed.name).trim()
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
+function restorePersistedActiveSelection() {
+    const persisted = getPersistedActiveSelection();
+    if (!persisted || !persisted.name) {
+        return;
+    }
+
+    if (persisted.type === 'group') {
+        if (typeof showGroupChatModal === 'function' && typeof openGroupRoom === 'function') {
+            showGroupChatModal();
+            openGroupRoom(persisted.name, [], '', false);
+        }
+        return;
+    }
+
+    if (typeof openChat === 'function') {
+        openChat(persisted.name);
     }
 }
 
@@ -3987,6 +4250,7 @@ function openChat(userName) {
 
     activeChatUser = userName;
     displayedConversationUser = userName;
+    persistActiveSelection('direct', userName);
 
     if (chatName) {
         chatName.innerText = userName;
@@ -3994,9 +4258,38 @@ function openChat(userName) {
     if (chatStatus) {
         chatStatus.innerText = 'Tap to chat';
     }
-    if (chatAvatar) {
-        chatAvatar.innerText = userName.substring(0, 2).toUpperCase();
-    }
+
+    const cachedMeta = directUserMetaCache[userName] || {};
+    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
+
+    currentChatInfo = {
+        type: 'contact',
+        name: userName,
+        username: userName,
+        avatar: getDefaultAvatarText(userName),
+        avatarGradient: 'linear-gradient(45deg, #ff6b6b, #feca57)',
+        status: 'Tap to chat',
+        isOnline: false,
+        about: cachedMeta.about || 'Hey there! I am using ZyncChat.',
+        profilePic: cachedMeta.profilePic || ''
+    };
+
+    fetchAndCacheUserProfile(userName).then((meta) => {
+        if (!meta || activeChatUser !== userName) {
+            return;
+        }
+
+        currentChatInfo = {
+            ...currentChatInfo,
+            about: meta.about || currentChatInfo.about,
+            profilePic: meta.profilePic || ''
+        };
+        renderChatHeaderAvatar(userName, currentChatInfo.profilePic);
+
+        if (profileModal && profileModal.classList.contains('show')) {
+            loadProfileContent();
+        }
+    });
 
     if (welcomeScreen && chatInterface) {
         welcomeScreen.style.display = 'none';
@@ -4511,7 +4804,7 @@ function sendMessage() {
             }
 
             sendRealtimeMessage(sender, activeChatUser, text, data.timestamp, serverMessageId, clientMessageId);
-            loadRecentChats();
+            bumpRecentChatToTop(activeChatUser, { lastMessage: text, unreadCount: 0 });
         })
         .catch(error => {
             console.error('Error sending message:', error);
@@ -4608,14 +4901,13 @@ function initChatSocket() {
             if (activeChatUser === fromUser) {
                 const conversationKey = getConversationMessageKey(data);
                 appendConversationMessage(fromUser, messageData, false, true, conversationKey);
-                markConversationRead(fromUser).finally(() => {
-                    loadRecentChats();
-                });
+                markConversationRead(fromUser);
+                bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 0 });
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
             } else {
                 saveMessageToData(text, false, time, messageData.id);
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
-                loadRecentChats();
+                bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 1 });
             }
         } catch (err) {
             console.error('WebSocket message parse error:', err);
@@ -4886,16 +5178,30 @@ function loadRecentChats() {
     }
 
     recentChatsFetchInFlight = true;
+    const requestSeq = ++recentChatsRequestSeq;
 
-    fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}`)
+    fetch(`/chatapp/get-recent-chats?username=${encodeURIComponent(username)}&_ts=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache'
+        }
+    })
         .then(response => response.json())
         .then(data => {
+            if (requestSeq !== recentChatsRequestSeq) {
+                return;
+            }
+
             const chatList = document.getElementById('chatList');
             if (!chatList) return;
 
+            const orderedData = Array.isArray(data)
+                ? data.slice().sort((left, right) => getRecentChatActivity(right) - getRecentChatActivity(left))
+                : [];
+
             chatList.innerHTML = '';
 
-            if (data.length === 0) {
+            if (orderedData.length === 0) {
                 // Show message when no recent chats
                 chatList.innerHTML = `
                     <div class="no-chats-message">
@@ -4906,7 +5212,29 @@ function loadRecentChats() {
                 `;
             } else {
                 // Populate recent chats
-                data.forEach(chat => {
+                orderedData.forEach(chat => {
+                    const nameKey = getRecentChatLookupKey(chat.name || chat.username || '');
+                    const localPreview = recentChatLocalPreview.get(nameKey);
+                    if (localPreview && localPreview.message && getRecentChatActivity(chat) <= localPreview.timestamp) {
+                        chat.lastMessage = localPreview.message;
+                    }
+
+                    if (!Boolean(chat.isGroupRoom || chat.isGroupChat)) {
+                        const key = (chat.name || chat.username || '').trim();
+                        if (key) {
+                            cacheDirectUserMeta(key, {
+                                profilePic: chat.profilePic || ''
+                            });
+                            if (!recentChatLocalOrder.has(getRecentChatLookupKey(key))) {
+                                setRecentChatActivity(key, chat.lastMessageTime || Date.now());
+                            }
+                        }
+                    } else {
+                        const key = (chat.name || chat.username || '').trim();
+                        if (key && !recentChatLocalOrder.has(getRecentChatLookupKey(key))) {
+                            setRecentChatActivity(key, chat.lastMessageTime || Date.now());
+                        }
+                    }
                     const chatItem = createChatItem(chat, username);
                     chatList.appendChild(chatItem);
                 });
@@ -4926,6 +5254,78 @@ function loadRecentChats() {
                 loadRecentChats();
             }
         });
+}
+
+function getRecentChatLookupKey(name) {
+    return (name || '').trim().toLowerCase();
+}
+
+function setRecentChatActivity(chatName, timestamp) {
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!lookupKey) {
+        return;
+    }
+
+    recentChatLocalOrder.set(lookupKey, Number(timestamp || Date.now()));
+}
+
+function getRecentChatActivity(chat) {
+    const chatName = chat && (chat.name || chat.username) ? String(chat.name || chat.username).trim() : '';
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!lookupKey) {
+        return 0;
+    }
+
+    const localTimestamp = recentChatLocalOrder.get(lookupKey);
+    if (typeof localTimestamp === 'number' && !Number.isNaN(localTimestamp)) {
+        return localTimestamp;
+    }
+
+    const fallback = chat && chat.lastMessageTime ? new Date(chat.lastMessageTime).getTime() : 0;
+    return Number.isNaN(fallback) ? 0 : fallback;
+}
+
+function bumpRecentChatToTop(chatName, options = {}) {
+    const chatList = document.getElementById('chatList');
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!chatList || !lookupKey) {
+        return;
+    }
+
+    setRecentChatActivity(chatName, Date.now());
+
+    const chatItem = chatList.querySelector('.chat-item[data-chat-key="' + lookupKey.replace(/"/g, '\\"') + '"]');
+    if (!chatItem) {
+        return;
+    }
+
+    const preview = chatItem.querySelector('.last-message');
+    if (preview && typeof options.lastMessage === 'string') {
+        const safePreview = options.lastMessage.trim();
+        recentChatLocalPreview.set(lookupKey, { message: safePreview, timestamp: Date.now() });
+        preview.textContent = safePreview.length > 30 ? safePreview.substring(0, 30) + '...' : safePreview;
+    }
+
+    const unreadCount = Number(options.unreadCount || 0);
+    let unreadBadge = chatItem.querySelector('.unread-count');
+    if (unreadCount > 0) {
+        const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
+        if (!unreadBadge) {
+            unreadBadge = document.createElement('div');
+            unreadBadge.className = 'unread-count';
+            const previewWrap = chatItem.querySelector('.chat-preview');
+            if (previewWrap) {
+                previewWrap.appendChild(unreadBadge);
+            }
+        }
+        unreadBadge.textContent = unreadLabel;
+        unreadBadge.setAttribute('title', unreadCount + ' unread messages');
+    } else if (unreadBadge) {
+        unreadBadge.remove();
+    }
+
+    setRecentChatActivity(chatName, Date.now());
+    chatList.insertBefore(chatItem, chatList.firstElementChild);
 }
 
 function startRecentChatsAutoRefresh() {
@@ -4972,6 +5372,10 @@ function createChatItem(chat, currentUser) {
     }
     const isGroupRoom = Boolean(chat.isGroupRoom || chat.isGroupChat);
     const initials = displayName.substring(0, 2).toUpperCase();
+    const profilePic = !isGroupRoom && chat.profilePic ? String(chat.profilePic).trim() : '';
+    const avatarMarkup = profilePic
+        ? `<img src="${profilePic}" alt="${displayName}" class="chat-avatar-image">`
+        : initials;
     const lastMessage = chat.lastMessage || "No messages yet";
     const activeGroupRoom = (typeof groupChatState !== 'undefined' && groupChatState && groupChatState.activeRoomName)
         ? String(groupChatState.activeRoomName).trim()
@@ -4981,13 +5385,16 @@ function createChatItem(chat, currentUser) {
     const unreadCount = Number(chat.unreadCount || 0);
     const shouldShowUnread = unreadCount > 0 && !(isGroupRoom ? isActiveGroupRoom : isActiveUserChat);
     const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
+    const chatKey = getRecentChatLookupKey(displayName);
 
     if (isActiveUserChat || isActiveGroupRoom) {
         chatItem.classList.add('active');
     }
+    chatItem.setAttribute('data-chat-key', chatKey);
+    chatItem.setAttribute('data-chat-group', isGroupRoom ? '1' : '0');
     
     chatItem.innerHTML = `
-        <div class="chat-avatar">${initials}</div>
+        <div class="chat-avatar">${avatarMarkup}</div>
         <div class="chat-info">
             <div class="chat-name">${isGroupRoom ? '🏠 ' : ''}${displayName}</div>
             <div class="chat-preview">
@@ -5013,11 +5420,15 @@ function createChatItem(chat, currentUser) {
 document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
     loadUserSettings();
+    syncSidebarProfileCard();
     applyChatFontSize(userSettings.chat.fontSize);
     loadRecentChats(); // Load recent chats dynamically
     startRecentChatsAutoRefresh();
     initializeEventListeners();
     initChatSocket();
+    setTimeout(() => {
+        restorePersistedActiveSelection();
+    }, 80);
     
     setTimeout(() => {
         if (chatMessages && chatMessages.children.length > 0) {
@@ -5040,6 +5451,10 @@ window.addEventListener('load', () => {
         welcomeScreen.style.display = 'flex';
         sidebar.classList.remove('hide');
         mainChat.classList.remove('show');
+    }
+
+    if (!activeChatUser && !(typeof groupChatState !== 'undefined' && groupChatState && groupChatState.activeRoomName)) {
+        restorePersistedActiveSelection();
     }
 });
 

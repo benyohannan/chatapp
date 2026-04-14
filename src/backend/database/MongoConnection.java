@@ -32,7 +32,9 @@ public class MongoConnection {
                 .append("lastName", user.getLastName())
                 .append("username", user.getUsername())
                 .append("email", user.getEmail())
-                .append("password", user.getPassword());
+                .append("password", user.getPassword())
+                .append("about", "Hey there! I am using ZyncChat.")
+                .append("profilePic", "");
         users.insertOne(doc);
     }
 

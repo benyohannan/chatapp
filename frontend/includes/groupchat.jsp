@@ -834,6 +834,9 @@ function hideGroupChatModal() {
     if (container) {
         container.style.display = 'none';
     }
+    if (typeof clearPersistedActiveSelection === 'function') {
+        clearPersistedActiveSelection();
+    }
     toggleGroupRequestsPanel(false);
 }
 
@@ -1093,6 +1096,9 @@ function openGroupRoom(roomName, members, creator, isCreator, adminOnlyMode) {
     loadGroupRoomMessages(cleanRoomName);
     startGroupRoomRealtime(cleanRoomName);
     syncActiveRoomPermissions();
+    if (typeof persistActiveSelection === 'function') {
+        persistActiveSelection('group', cleanRoomName);
+    }
     refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
     if (typeof loadRecentChats === 'function') {
         loadRecentChats();
@@ -1238,6 +1244,10 @@ function joinGroupRoom(roomName) {
         return;
     }
 
+    if (window.ZyncLoader && typeof window.ZyncLoader.show === 'function') {
+        window.ZyncLoader.show('Joining room');
+    }
+
     fetch('/chatapp/join-group-room', {
         method: 'POST',
         headers: {
@@ -1253,14 +1263,23 @@ function joinGroupRoom(roomName) {
 
             if (result.body && result.body.isMember) {
                 openGroupRoom(result.body.roomName || cleanRoomName, [], '', false);
+                if (window.ZyncLoader && typeof window.ZyncLoader.hide === 'function') {
+                    window.ZyncLoader.hide();
+                }
             } else {
                 refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
                 alert(result.body && result.body.message ? result.body.message : 'Join request sent to the room creator.');
+                if (window.ZyncLoader && typeof window.ZyncLoader.hide === 'function') {
+                    window.ZyncLoader.hide();
+                }
             }
         })
         .catch(error => {
             console.error('Error joining room:', error);
             alert(error.message || 'Unable to join room');
+            if (window.ZyncLoader && typeof window.ZyncLoader.hide === 'function') {
+                window.ZyncLoader.hide();
+            }
         });
 }
 
@@ -1282,6 +1301,10 @@ function createGroupRoom() {
     if (groupChatState.selectedMembers.length === 0) {
         alert('Please add at least one member.');
         return;
+    }
+
+    if (window.ZyncLoader && typeof window.ZyncLoader.show === 'function') {
+        window.ZyncLoader.show('Creating room');
     }
 
     const members = groupChatState.selectedMembers.slice();
@@ -1311,10 +1334,16 @@ function createGroupRoom() {
 
             refreshGroupRooms();
             openGroupRoom(createdRoomName, createdMembers, username, true);
+            if (window.ZyncLoader && typeof window.ZyncLoader.hide === 'function') {
+                window.ZyncLoader.hide();
+            }
         })
         .catch(error => {
             console.error('Error creating room:', error);
             alert(error.message || 'Unable to create room');
+            if (window.ZyncLoader && typeof window.ZyncLoader.hide === 'function') {
+                window.ZyncLoader.hide();
+            }
         });
 }
 
@@ -1363,8 +1392,11 @@ function startGroupRoomRealtime(roomName) {
             }
 
             appendGroupRoomMessage(payload);
-            if (typeof loadRecentChats === 'function') {
-                loadRecentChats();
+            if (typeof bumpRecentChatToTop === 'function') {
+                bumpRecentChatToTop(payload.roomName || roomName, {
+                    lastMessage: payload.message || '',
+                    unreadCount: payload.sender && payload.sender.trim() === getGroupUsername() ? 0 : 1
+                });
             }
             if (payload.sender && payload.sender.trim() !== getGroupUsername() && typeof window.notifyIncomingMessage === 'function') {
                 const notificationKey = [
@@ -1491,6 +1523,12 @@ function loadGroupRoomMessages(roomName, silent) {
                     const key = groupMessageKey(payload);
                     const isOwnMessage = payload.sender && payload.sender.trim() === username;
                     if (!isOwnMessage && key && !existingKeys.has(key) && typeof window.notifyIncomingMessage === 'function') {
+                        if (typeof bumpRecentChatToTop === 'function') {
+                            bumpRecentChatToTop(payload.roomName || cleanRoomName, {
+                                lastMessage: payload.message || '',
+                                unreadCount: 1
+                            });
+                        }
                         const notificationKey = [
                             'group',
                             payload.roomName || '',
@@ -1692,8 +1730,11 @@ function sendGroupMessage() {
             if (groupChatState.ws && groupChatState.ws.readyState === WebSocket.OPEN) {
                 groupChatState.ws.send(JSON.stringify(payload));
             }
-            if (typeof loadRecentChats === 'function') {
-                loadRecentChats();
+            if (typeof bumpRecentChatToTop === 'function') {
+                bumpRecentChatToTop(roomName, {
+                    lastMessage: payload.message || message,
+                    unreadCount: 0
+                });
             }
             refreshGroupRooms(document.getElementById('groupRoomSearchInput') ? document.getElementById('groupRoomSearchInput').value.trim() : '');
         })

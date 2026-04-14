@@ -383,7 +383,7 @@ public class ConversationService {
         }
 
         if (sender != null && !sender.isBlank()) {
-            counts.put(sender, counts.getOrDefault(sender, 0) + 1);
+            counts.put(sender, counts.getOrDefault(sender, 0));
         }
         if (receiver != null && !receiver.isBlank()) {
             counts.put(receiver, counts.getOrDefault(receiver, 0) + 1);

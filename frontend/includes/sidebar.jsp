@@ -65,17 +65,17 @@
 
     <!-- <div class="sidebar-profile-section">
         <button type="button" class="sidebar-profile-card" id="sidebarProfileBtn" title="Open profile">
-            <div class="sidebar-profile-avatar"><%= sidebarInitial %></div>
+            <div class="sidebar-profile-avatar" id="sidebarProfileAvatar"><%= sidebarInitial %></div>
             <div class="sidebar-profile-meta">
-                <div class="sidebar-profile-name"><%= sidebarUsername %></div>
+                <div class="sidebar-profile-name" id="sidebarProfileName"><%= sidebarUsername %></div>
                 <div class="sidebar-profile-status">Available</div>
             </div>
-        </button> -->
+        </button>
 
         <div class="sidebar-profile-actions">
-            <!-- <button type="button" class="sidebar-profile-menu-btn" id="sidebarProfileMenuBtn" title="Profile menu">
+            <button type="button" class="sidebar-profile-menu-btn" id="sidebarProfileMenuBtn" title="Profile menu">
                 <i class="fas fa-ellipsis-v"></i>
-            </button> -->
+            </button>
             <div class="dropdown-menu sidebar-profile-menu" id="sidebarProfileMenu">
                 <div class="dropdown-item" id="openProfileSettingsBtn">
                     <i class="fas fa-user"></i>
@@ -88,7 +88,7 @@
                 </div>
             </div>
         </div>
-    <!-- </div> -->
+    </div> -->
 
     <form id="logoutForm" action="${pageContext.request.contextPath}/logout" method="post" style="display:none;"></form>
 

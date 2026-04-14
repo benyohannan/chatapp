@@ -13,7 +13,7 @@ public class User {
     private String password;
 
     private String profilePic;
-    private String about = "Hey there! I am using RainChatify";
+    private String about = "Hey there! I am using ZyncChat.";
 
     private String status = "offline";
     private LocalDateTime lastSeen;

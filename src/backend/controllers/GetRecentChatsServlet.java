@@ -2,6 +2,7 @@ package backend.controllers;
 
 import backend.services.ConversationService;
 import backend.services.GroupRoomService;
+import backend.services.UserService;
 import org.bson.Document;
 
 import jakarta.servlet.ServletException;
@@ -21,6 +22,7 @@ public class GetRecentChatsServlet extends HttpServlet {
 
     private final ConversationService conversationService = new ConversationService();
     private final GroupRoomService groupRoomService = new GroupRoomService();
+    private final UserService userService = new UserService();
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
@@ -53,13 +55,15 @@ public class GetRecentChatsServlet extends HttpServlet {
                 String lastMessage = conversation.getString("lastMessage") != null ? conversation.getString("lastMessage") : "";
                 String lastMessageTime = conversation.getString("lastMessageTime") != null ? conversation.getString("lastMessageTime") : "";
                 long unreadCount = conversationService.getUnreadCount(conversationId, username);
+                String profilePic = userService.getUserProfilePic(otherParticipant);
 
                 recentEntries.add(RecentChatEntry.userChat(
                         conversationId,
                         otherParticipant,
                         lastMessage,
                         lastMessageTime,
-                        unreadCount
+                    unreadCount,
+                    profilePic
                 ));
             }
 
@@ -78,8 +82,8 @@ public class GetRecentChatsServlet extends HttpServlet {
                         roomId,
                         roomName,
                         lastMessage,
-                    lastMessageTime,
-                    unreadCount
+                        lastMessageTime,
+                        unreadCount
                 ));
             }
 
@@ -103,6 +107,7 @@ public class GetRecentChatsServlet extends HttpServlet {
                     .append("\"name\":\"").append(escapeJson(entry.username)).append("\",")
                     .append("\"lastMessage\":\"").append(escapeJson(entry.lastMessage)).append("\",")
                     .append("\"lastMessageTime\":\"").append(escapeJson(entry.lastMessageTime)).append("\",")
+                    .append("\"profilePic\":\"").append(escapeJson(entry.profilePic)).append("\",")
                     .append("\"unreadCount\":").append(entry.unreadCount).append(",")
                     .append("\"isGroupRoom\":").append(entry.isGroupRoom).append(",")
                     .append("\"isGroupChat\":").append(entry.isGroupRoom)
@@ -144,24 +149,26 @@ public class GetRecentChatsServlet extends HttpServlet {
         final String username;
         final String lastMessage;
         final String lastMessageTime;
+        final String profilePic;
         final long unreadCount;
         final boolean isGroupRoom;
 
-        private RecentChatEntry(String conversationId, String username, String lastMessage, String lastMessageTime, long unreadCount, boolean isGroupRoom) {
+        private RecentChatEntry(String conversationId, String username, String lastMessage, String lastMessageTime, String profilePic, long unreadCount, boolean isGroupRoom) {
             this.conversationId = conversationId == null ? "" : conversationId;
             this.username = username == null ? "" : username;
             this.lastMessage = lastMessage == null ? "" : lastMessage;
             this.lastMessageTime = lastMessageTime == null ? "" : lastMessageTime;
+            this.profilePic = profilePic == null ? "" : profilePic;
             this.unreadCount = unreadCount;
             this.isGroupRoom = isGroupRoom;
         }
 
-        static RecentChatEntry userChat(String conversationId, String username, String lastMessage, String lastMessageTime, long unreadCount) {
-            return new RecentChatEntry(conversationId, username, lastMessage, lastMessageTime, unreadCount, false);
+        static RecentChatEntry userChat(String conversationId, String username, String lastMessage, String lastMessageTime, long unreadCount, String profilePic) {
+            return new RecentChatEntry(conversationId, username, lastMessage, lastMessageTime, profilePic, unreadCount, false);
         }
 
         static RecentChatEntry groupRoom(String roomId, String roomName, String lastMessage, String lastMessageTime, long unreadCount) {
-            return new RecentChatEntry(roomId, roomName, lastMessage, lastMessageTime, unreadCount, true);
+            return new RecentChatEntry(roomId, roomName, lastMessage, lastMessageTime, "", unreadCount, true);
         }
     }
 
