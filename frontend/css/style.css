@@ -75,6 +75,125 @@ body {
   transition: all 0.3s ease;
 }
 
+.zync-global-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 15% 20%, #1f8d5f 0%, rgba(31, 141, 95, 0.08) 30%),
+              radial-gradient(circle at 85% 82%, #174d3d 0%, rgba(23, 77, 61, 0.05) 28%),
+              #f2f4f7;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.65s ease, visibility 0.65s ease;
+}
+
+.light-mode .zync-global-loader {
+  background: radial-gradient(circle at 15% 20%, #1f8d5f 0%, rgba(31, 141, 95, 0.08) 30%),
+              radial-gradient(circle at 85% 82%, #174d3d 0%, rgba(23, 77, 61, 0.05) 28%),
+              #f2f4f7;
+}
+
+.zync-global-loader.hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.zync-loader-center {
+  text-align: center;
+  position: relative;
+}
+
+.zync-loader-ring {
+  width: 146px;
+  height: 146px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  border: 2px solid rgba(22, 101, 72, 0.16);
+  border-top-color: rgba(22, 101, 72, 0.62);
+  animation: zyncSpin 2.8s linear infinite, zyncPulse 2.1s ease-in-out infinite;
+}
+
+.zync-loader-brand {
+  margin: 0;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #0f5132;
+  text-shadow: 0 10px 30px rgba(31, 141, 95, 0.2);
+}
+
+.zync-loader-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(23, 36, 28, 0.72);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.zync-loader-line {
+  margin: 14px auto 0;
+  width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(22, 101, 72, 0.18);
+  overflow: hidden;
+}
+
+.zync-loader-line span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f9d58, #1f8d5f);
+  animation: zyncSweep 1.05s ease-in-out infinite;
+}
+
+@keyframes zyncSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zyncPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(15, 157, 88, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 0 16px rgba(15, 157, 88, 0);
+  }
+}
+
+@keyframes zyncSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+body:not(.light-mode) .zync-global-loader {
+  background: radial-gradient(circle at 15% 20%, rgba(31, 141, 95, 0.38) 0%, rgba(31, 141, 95, 0.05) 35%),
+              radial-gradient(circle at 85% 82%, rgba(83, 189, 235, 0.24) 0%, rgba(83, 189, 235, 0.04) 25%),
+              #0b141a;
+}
+
+body:not(.light-mode) .zync-loader-brand {
+  color: #d1fae5;
+}
+
+body:not(.light-mode) .zync-loader-text {
+  color: rgba(233, 237, 239, 0.78);
+}
+
+body.app-booting {
+  overflow: hidden;
+}
+
 .RainChatify-container {
   display: flex;
   flex-direction: row;
@@ -474,6 +593,14 @@ body {
   font-size: 22px;
   font-weight: 700;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sidebar-profile-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sidebar-profile-meta {
@@ -573,6 +700,14 @@ body {
   font-weight: bold;
   font-size: 18px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.chat-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .chat-info {
@@ -707,6 +842,14 @@ body {
   justify-content: center;
   color: white;
   font-weight: bold;
+  overflow: hidden;
+}
+
+.chat-user-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .chat-user-details h3 {
@@ -1897,8 +2040,8 @@ body {
   background: var(--secondary-bg);
   width: 100%;
   max-width: 420px;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow-y: auto;
   position: relative;
   animation: slideInRight 0.3s ease;
@@ -2030,6 +2173,14 @@ body {
   font-size: 48px;
   font-weight: bold;
   margin: 0 auto;
+  overflow: hidden;
+}
+
+.profile-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .online-indicator-large {
@@ -2442,8 +2593,8 @@ body {
   background: var(--secondary-bg);
   width: 100%;
   max-width: 420px;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow-y: auto;
   position: relative;
   animation: slideInRight 0.3s ease;
@@ -2531,6 +2682,14 @@ body {
   color: white;
   font-size: 24px;
   font-weight: bold;
+  overflow: hidden;
+}
+
+.settings-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .settings-profile-info {
@@ -2568,6 +2727,18 @@ body {
 
 .settings-item:hover {
   background: var(--hover-bg);
+}
+
+.settings-item-future {
+  opacity: 0.82;
+}
+
+.settings-item-future .settings-subtitle {
+  font-style: italic;
+}
+
+.settings-item-future:hover {
+  background: transparent;
 }
 
 .settings-item-danger .settings-icon,
@@ -2629,8 +2800,9 @@ body {
 .edit-profile-modal {
   background: var(--secondary-bg);
   max-width: 420px;
-  height: 100vh;
-  max-height: 100vh;
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
   overflow-y: auto;
   position: relative;
   animation: slideInRight 0.3s ease;
@@ -2722,6 +2894,14 @@ body {
   color: white;
   font-size: 48px;
   font-weight: bold;
+  overflow: hidden;
+}
+
+.edit-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .edit-avatar-overlay {
@@ -2795,6 +2975,36 @@ body {
 
 .edit-input-group input[readonly] {
   color: var(--text-secondary);
+}
+
+.edit-input-group input[readonly] + .edit-field-icon {
+  display: none;
+}
+
+@supports not (height: 100dvh) {
+  .profile-modal,
+  .settings-modal,
+  .edit-profile-modal {
+    height: 100vh;
+    max-height: 100vh;
+  }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .modal-overlay {
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .profile-modal,
+  .settings-modal,
+  .edit-profile-modal {
+    max-width: 100%;
+    width: 100%;
+    border-radius: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+  }
 }
 
 .edit-field-icon {
@@ -3159,6 +3369,14 @@ input:checked + .toggle-slider:before {
   color: white;
   font-size: 20px;
   font-weight: bold;
+  overflow: hidden;
+}
+
+.status-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .status-ring {

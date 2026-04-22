@@ -8,9 +8,11 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Projections;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -27,6 +29,8 @@ public class UserService {
                 .append("username", user.getUsername())
                 .append("email", user.getEmail())
                 .append("password", user.getPassword())
+            .append("about", "Hey there! I am using ZyncChat.")
+            .append("profilePic", "")
                 .append("status", "offline");
 
         users.insertOne(doc);
@@ -103,5 +107,61 @@ public class UserService {
         }
 
         return usernames;
+    }
+
+    public String getUserProfilePic(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return "";
+        }
+
+        MongoDatabase db = MongoConnection.getDatabase();
+        MongoCollection<Document> users = db.getCollection("users");
+        Document doc = users.find(Filters.eq("username", username.trim()))
+                .projection(Projections.include("profilePic"))
+                .first();
+
+        return doc != null ? safeString(doc.getString("profilePic")) : "";
+    }
+
+    public String getUserAbout(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return "";
+        }
+
+        MongoDatabase db = MongoConnection.getDatabase();
+        MongoCollection<Document> users = db.getCollection("users");
+        Document doc = users.find(Filters.eq("username", username.trim()))
+                .projection(Projections.include("about"))
+                .first();
+
+        return doc != null ? safeString(doc.getString("about")) : "";
+    }
+
+    public boolean updateUserProfile(String username, String about, String profilePic) {
+        if (username == null || username.trim().isEmpty()) {
+            return false;
+        }
+
+        MongoDatabase db = MongoConnection.getDatabase();
+        MongoCollection<Document> users = db.getCollection("users");
+
+        Document setDoc = new Document("updatedAt", LocalDateTime.now().toString());
+        if (about != null) {
+            setDoc.append("about", about.trim());
+        }
+        if (profilePic != null) {
+            setDoc.append("profilePic", profilePic.trim());
+        }
+
+        UpdateResult result = users.updateOne(
+                Filters.eq("username", username.trim()),
+                new Document("$set", setDoc)
+        );
+
+        return result.getMatchedCount() > 0;
+    }
+
+    private String safeString(String value) {
+        return value == null ? "" : value;
     }
 }
