@@ -82,6 +82,23 @@
             border-color: rgba(16, 128, 87, 0.35);
         }
 
+        .field-error {
+            display: none;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #dc3545;
+            font-weight: 500;
+        }
+
+        .field-error.show {
+            display: block;
+        }
+
+        .form-control.is-invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.12);
+        }
+
         .btn-custom {
             border-radius: 25px;
             padding: 10px;
@@ -503,6 +520,34 @@
 
 <%
     String error = request.getParameter("error");
+    String errorMessage = "";
+    if ("invalid_credentials".equals(error)) {
+        errorMessage = "Invalid username or password.";
+    } else if ("server".equals(error)) {
+        errorMessage = "Server error during login. Please try again.";
+    } else if ("missing_login_fields".equals(error)) {
+        errorMessage = "Please enter both username and password.";
+    } else if ("invalid_login_username".equals(error)) {
+        errorMessage = "Username must be at least 3 characters long.";
+    } else if ("invalid_login_password".equals(error)) {
+        errorMessage = "Password must be at least 6 characters long.";
+    } else if ("missing_register_fields".equals(error)) {
+        errorMessage = "Please complete every registration field.";
+    } else if ("invalid_first_name".equals(error)) {
+        errorMessage = "First name should only contain letters, spaces, apostrophes, or hyphens.";
+    } else if ("invalid_last_name".equals(error)) {
+        errorMessage = "Last name should only contain letters, spaces, apostrophes, or hyphens.";
+    } else if ("invalid_username".equals(error)) {
+        errorMessage = "Username must be 3 to 20 characters and can include letters, numbers, and underscores.";
+    } else if ("invalid_email".equals(error)) {
+        errorMessage = "Please enter a valid email address.";
+    } else if ("weak_password".equals(error)) {
+        errorMessage = "Password must be at least 6 characters long.";
+    } else if ("username_taken".equals(error)) {
+        errorMessage = "That username is already in use.";
+    } else if ("email_taken".equals(error)) {
+        errorMessage = "That email is already registered.";
+    }
 %>
 
 <div id="authLoader" class="auth-loader" aria-live="polite" aria-label="Loading ZyncChat">
@@ -523,19 +568,17 @@
 
     <div id="loginForm" class="form-box active">
         <h2 class="text-center mb-4">Login</h2>
-        <% if ("invalid_credentials".equals(error)) { %>
-            <div class="alert alert-danger" role="alert">Invalid username or password.</div>
-        <% } else if ("server".equals(error)) { %>
-            <div class="alert alert-danger" role="alert">Server error during login. Please try again.</div>
+        <% if (!errorMessage.isEmpty()) { %>
+            <div class="alert alert-danger" role="alert"><%= errorMessage %></div>
         <% } %>
 
         <form action="${pageContext.request.contextPath}/login" method="post" class="auth-submit-form" data-loader-text="Signing you in">
             <div class="mb-3">
-                <input type="text" class="form-control" name="username" placeholder="Username or Email" required>
+                <input type="text" class="form-control" name="username" placeholder="Username or Email" minlength="3" maxlength="60" required>
             </div>
 
             <div class="mb-3 position-relative">
-                <input type="password" id="loginPass" class="form-control" name="password" placeholder="Password" required>
+                <input type="password" id="loginPass" class="form-control" name="password" placeholder="Password" minlength="6" required>
                 <span class="password-toggle" onclick="togglePassword('loginPass')">👁️</span>
             </div>
 
@@ -551,23 +594,25 @@
         <h2 class="text-center mb-4">Register</h2>
         <form action="${pageContext.request.contextPath}/register" method="post" class="auth-submit-form" data-loader-text="Creating your account">
             <div class="mb-3">
-                <input type="text" class="form-control" name="firstName" placeholder="First Name" required>
+                <input type="text" class="form-control" name="firstName" placeholder="First Name" minlength="2" maxlength="30" pattern="[A-Za-z][A-Za-z '-]{1,29}" title="Use letters, spaces, apostrophes, or hyphens only." required>
+                <div class="field-error" data-error-for="firstName"></div>
             </div>
 
             <div class="mb-3">
-                <input type="text" class="form-control" name="lastName" placeholder="Last Name" required>
+                <input type="text" class="form-control" name="lastName" placeholder="Last Name" minlength="2" maxlength="30" pattern="[A-Za-z][A-Za-z '-]{1,29}" title="Use letters, spaces, apostrophes, or hyphens only." required>
+                <div class="field-error" data-error-for="lastName"></div>
             </div>
 
             <div class="mb-3">
-                <input type="text" class="form-control" name="username" placeholder="Username" required>
+                <input type="text" class="form-control" name="username" placeholder="Username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required>
             </div>
 
             <div class="mb-3">
-                <input type="email" class="form-control" name="email" placeholder="Email" required>
+                <input type="email" class="form-control" name="email" placeholder="Email" maxlength="80" required>
             </div>
 
             <div class="mb-3 position-relative">
-                <input type="password" id="regPass" class="form-control" name="password" placeholder="Password" onkeyup="checkStrength()" required>
+                <input type="password" id="regPass" class="form-control" name="password" placeholder="Password" minlength="6" onkeyup="checkStrength()" required>
                 <span class="password-toggle" onclick="togglePassword('regPass')">👁️</span>
                 <div id="strengthBar" class="strength"></div>
             </div>
@@ -651,10 +696,8 @@
 
         if (pass.length < 6) {
             bar.className = "strength weak";
-        } else if (pass.match(/[A-Z]/) && pass.match(/[0-9]/)) {
-            bar.className = "strength strong";
         } else {
-            bar.className = "strength medium";
+            bar.className = pass.length < 10 ? "strength medium" : "strength strong";
         }
     }
 
@@ -662,11 +705,120 @@
         document.body.classList.toggle("dark");
     }
 
+    function setFieldError(form, fieldName, message) {
+        const input = form.querySelector('[name="' + fieldName + '"]');
+        const error = form.querySelector('[data-error-for="' + fieldName + '"]');
+
+        if (input) {
+            input.classList.toggle('is-invalid', Boolean(message));
+        }
+
+        if (error) {
+            error.textContent = message || '';
+            error.classList.toggle('show', Boolean(message));
+        }
+    }
+
+    function clearFieldErrors(form, fieldNames) {
+        fieldNames.forEach(function(fieldName) {
+            setFieldError(form, fieldName, '');
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         runAuthIntro();
 
+        document.querySelector('#loginForm form').addEventListener('submit', function(event) {
+            const username = this.querySelector('[name="username"]').value.trim();
+            const password = this.querySelector('[name="password"]').value;
+
+            if (!username || !password) {
+                event.preventDefault();
+                alert('Please enter both username and password.');
+                return;
+            }
+
+            if (username.length < 3) {
+                event.preventDefault();
+                alert('Username must be at least 3 characters long.');
+                return;
+            }
+
+            if (password.length < 6) {
+                event.preventDefault();
+                alert('Password must be at least 6 characters long.');
+                return;
+            }
+        });
+
+        document.querySelector('#registerForm form').addEventListener('submit', function(event) {
+            clearFieldErrors(this, ['firstName', 'lastName']);
+
+            const firstName = this.querySelector('[name="firstName"]').value.trim();
+            const lastName = this.querySelector('[name="lastName"]').value.trim();
+            const username = this.querySelector('[name="username"]').value.trim();
+            const email = this.querySelector('[name="email"]').value.trim();
+            const password = this.querySelector('[name="password"]').value;
+            const namePattern = /^[A-Za-z][A-Za-z '-]{1,29}$/;
+            const usernamePattern = /^[A-Za-z0-9_]{3,20}$/;
+            const emailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+            if (!firstName || !lastName || !username || !email || !password) {
+                event.preventDefault();
+                if (!firstName) {
+                    setFieldError(this, 'firstName', 'First name is required.');
+                }
+                if (!lastName) {
+                    setFieldError(this, 'lastName', 'Last name is required.');
+                }
+                return;
+            }
+
+            if (!namePattern.test(firstName)) {
+                event.preventDefault();
+                setFieldError(this, 'firstName', 'First name should only contain letters, spaces, apostrophes, or hyphens.');
+                return;
+            }
+
+            if (!namePattern.test(lastName)) {
+                event.preventDefault();
+                setFieldError(this, 'lastName', 'Last name should only contain letters, spaces, apostrophes, or hyphens.');
+                return;
+            }
+
+            if (!usernamePattern.test(username)) {
+                event.preventDefault();
+                alert('Username must be 3 to 20 characters and can include letters, numbers, and underscores.');
+                return;
+            }
+
+            if (!emailPattern.test(email)) {
+                event.preventDefault();
+                alert('Please enter a valid email address.');
+                return;
+            }
+
+            if (password.length < 6) {
+                event.preventDefault();
+                alert('Password must be at least 6 characters long.');
+                return;
+            }
+        });
+
+        document.querySelector('#registerForm [name="firstName"]').addEventListener('input', function() {
+            setFieldError(this.form, 'firstName', '');
+        });
+
+        document.querySelector('#registerForm [name="lastName"]').addEventListener('input', function() {
+            setFieldError(this.form, 'lastName', '');
+        });
+
         document.querySelectorAll('.auth-submit-form').forEach(function(form) {
-            form.addEventListener('submit', function() {
+            form.addEventListener('submit', function(event) {
+                if (event.defaultPrevented) {
+                    return;
+                }
+
                 var loader = document.getElementById('authLoader');
                 var subtitle = loader ? loader.querySelector('.brand-subtitle') : null;
                 var customText = form.getAttribute('data-loader-text') || 'Loading secure chat experience';

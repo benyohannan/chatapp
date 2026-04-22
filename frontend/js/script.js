@@ -186,7 +186,7 @@ let directUserMetaCache = {};
 let recentChatLocalOrder = new Map();
 let recentChatLocalPreview = new Map();
 let recentChatsRequestSeq = 0;
-const ACTIVE_SELECTION_STORAGE_KEY = 'RainChatify-active-selection';
+const ACTIVE_SELECTION_STORAGE_KEY_PREFIX = 'RainChatify-active-selection';
 const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
 const DEFAULT_EMOJI_SET = [
     '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
@@ -3271,28 +3271,43 @@ function persistActiveSelection(type, name) {
     }
 
     const payload = JSON.stringify({ type: safeType, name: safeName });
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
-        localStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
+        sessionStorage.setItem(storageKey, payload);
+        localStorage.setItem(storageKey, payload);
     } catch (error) {
         console.warn('Unable to persist active selection:', error);
     }
 }
 
 function clearPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
-        localStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
+        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
     } catch (error) {
         console.warn('Unable to clear active selection:', error);
     }
 }
 
 function getPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return null;
+    }
+
     let raw = '';
     try {
-        raw = sessionStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
-            || localStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
+        raw = sessionStorage.getItem(storageKey)
+            || localStorage.getItem(storageKey)
             || '';
     } catch (error) {
         return null;
@@ -3316,9 +3331,22 @@ function getPersistedActiveSelection() {
     }
 }
 
+function getActiveSelectionStorageKey() {
+    const username = getLoggedInUsername();
+    if (!username) {
+        return null;
+    }
+
+    return ACTIVE_SELECTION_STORAGE_KEY_PREFIX + ':' + username.trim().toLowerCase();
+}
+
 function restorePersistedActiveSelection() {
     const persisted = getPersistedActiveSelection();
     if (!persisted || !persisted.name) {
+        if (chatInterface && welcomeScreen) {
+            chatInterface.style.display = 'none';
+            welcomeScreen.style.display = 'flex';
+        }
         return;
     }
 
@@ -3929,7 +3957,7 @@ function handleDelete() {
 
                 const remainingMessages = chatMessages.querySelectorAll('.message');
                 if (remainingMessages.length === 0) {
-                    showEmptyChatState();
+                    showRecentChatsPanel();
                 }
             }, 300);
         })
@@ -4250,17 +4278,8 @@ function openChat(userName) {
 
     activeChatUser = userName;
     displayedConversationUser = userName;
-    persistActiveSelection('direct', userName);
-
-    if (chatName) {
-        chatName.innerText = userName;
-    }
-    if (chatStatus) {
-        chatStatus.innerText = 'Tap to chat';
-    }
 
     const cachedMeta = directUserMetaCache[userName] || {};
-    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
 
     currentChatInfo = {
         type: 'contact',
@@ -4274,22 +4293,12 @@ function openChat(userName) {
         profilePic: cachedMeta.profilePic || ''
     };
 
-    fetchAndCacheUserProfile(userName).then((meta) => {
-        if (!meta || activeChatUser !== userName) {
-            return;
-        }
-
-        currentChatInfo = {
-            ...currentChatInfo,
-            about: meta.about || currentChatInfo.about,
-            profilePic: meta.profilePic || ''
-        };
-        renderChatHeaderAvatar(userName, currentChatInfo.profilePic);
-
-        if (profileModal && profileModal.classList.contains('show')) {
-            loadProfileContent();
-        }
-    });
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Loading chat...';
+    }
 
     if (welcomeScreen && chatInterface) {
         welcomeScreen.style.display = 'none';
@@ -4312,6 +4321,8 @@ function openChat(userName) {
         const nameElement = item.querySelector('.chat-name');
         item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
     });
+
+    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
 
     markConversationRead(userName).finally(() => {
         loadRecentChats();
@@ -4996,8 +5007,61 @@ function loadConversationMessages(otherUser, replaceAll = false) {
             }
 
             if (messages.length === 0) {
+                if (replaceAll) {
+                    clearPersistedActiveSelection();
+                }
                 showEmptyChatState();
                 return;
+            }
+
+            if (replaceAll) {
+                if (chatName) {
+                    chatName.innerText = otherUser;
+                }
+                if (chatStatus) {
+                    chatStatus.innerText = 'Tap to chat';
+                }
+                renderChatHeaderAvatar(otherUser, (directUserMetaCache[otherUser] && directUserMetaCache[otherUser].profilePic) || '');
+
+                if (welcomeScreen && chatInterface) {
+                    welcomeScreen.style.display = 'none';
+                    chatInterface.style.display = 'flex';
+                }
+
+                if (mainChat) {
+                    mainChat.classList.remove('collapsed');
+                }
+                if (sidebar) {
+                    sidebar.classList.remove('expanded');
+                }
+
+                if (isMobileDevice()) {
+                    if (sidebar) sidebar.classList.add('hide');
+                    if (mainChat) mainChat.classList.add('show');
+                }
+
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    const nameElement = item.querySelector('.chat-name');
+                    item.classList.toggle('active', !!nameElement && nameElement.textContent === otherUser);
+                });
+
+                persistActiveSelection('direct', otherUser);
+                fetchAndCacheUserProfile(otherUser).then((meta) => {
+                    if (!meta || activeChatUser !== otherUser) {
+                        return;
+                    }
+
+                    currentChatInfo = {
+                        ...currentChatInfo,
+                        about: meta.about || currentChatInfo.about,
+                        profilePic: meta.profilePic || ''
+                    };
+                    renderChatHeaderAvatar(otherUser, currentChatInfo.profilePic);
+
+                    if (profileModal && profileModal.classList.contains('show')) {
+                        loadProfileContent();
+                    }
+                });
             }
 
             messages.forEach(msg => {

@@ -68,6 +68,10 @@ public class UserService {
 
         List<Document> recentChats = new ArrayList<>();
         for (Document doc : results) {
+            String lastMessage = doc.getString("lastMessage");
+            if (lastMessage == null || lastMessage.trim().isEmpty()) {
+                continue;
+            }
             recentChats.add(doc);
         }
         return recentChats;
