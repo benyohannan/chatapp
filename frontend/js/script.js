@@ -185,9 +185,13 @@ let pendingProfilePhotoDataUrl = null;
 let directUserMetaCache = {};
 let recentChatLocalOrder = new Map();
 let recentChatLocalPreview = new Map();
+let recentChatLocalUnread = new Map();
+let recentChatUnreadClearAt = new Map();
 let recentChatsRequestSeq = 0;
-const ACTIVE_SELECTION_STORAGE_KEY = 'RainChatify-active-selection';
+const ACTIVE_SELECTION_STORAGE_KEY_PREFIX = 'RainChatify-active-selection';
 const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
+const LOCAL_UNREAD_HOLD_MS = 4500;
+const LOCAL_UNREAD_CLEAR_HOLD_MS = 2000;
 const DEFAULT_EMOJI_SET = [
     '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
     '😋', '😛', '😜', '🤪', '😝', '🫠', '🤗', '🤭', '🫢', '🫣', '🤫', '🤔', '🫡', '😐', '😑', '😶', '🫥', '😏', '😒', '🙄',
@@ -3211,6 +3215,8 @@ function confirmClearChat() {
     }, messages.length * 50 + 500);
 
     hideModal(clearChatModal);
+    loadRecentChats();
+    showRecentChatsPanel();
     showNotification('Chat cleared successfully');
 }
 
@@ -3271,28 +3277,43 @@ function persistActiveSelection(type, name) {
     }
 
     const payload = JSON.stringify({ type: safeType, name: safeName });
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
-        localStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
+        sessionStorage.setItem(storageKey, payload);
+        localStorage.setItem(storageKey, payload);
     } catch (error) {
         console.warn('Unable to persist active selection:', error);
     }
 }
 
 function clearPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
-        localStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
+        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
     } catch (error) {
         console.warn('Unable to clear active selection:', error);
     }
 }
 
 function getPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return null;
+    }
+
     let raw = '';
     try {
-        raw = sessionStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
-            || localStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
+        raw = sessionStorage.getItem(storageKey)
+            || localStorage.getItem(storageKey)
             || '';
     } catch (error) {
         return null;
@@ -3316,9 +3337,22 @@ function getPersistedActiveSelection() {
     }
 }
 
+function getActiveSelectionStorageKey() {
+    const username = getLoggedInUsername();
+    if (!username) {
+        return null;
+    }
+
+    return ACTIVE_SELECTION_STORAGE_KEY_PREFIX + ':' + username.trim().toLowerCase();
+}
+
 function restorePersistedActiveSelection() {
     const persisted = getPersistedActiveSelection();
     if (!persisted || !persisted.name) {
+        if (chatInterface && welcomeScreen) {
+            chatInterface.style.display = 'none';
+            welcomeScreen.style.display = 'flex';
+        }
         return;
     }
 
@@ -3929,6 +3963,21 @@ function handleDelete() {
 
                 const remainingMessages = chatMessages.querySelectorAll('.message');
                 if (remainingMessages.length === 0) {
+                    if (welcomeScreen && chatInterface) {
+                        welcomeScreen.style.display = 'none';
+                        chatInterface.style.display = 'flex';
+                    }
+
+                    if (mainChat) {
+                        mainChat.classList.remove('collapsed');
+                        mainChat.classList.add('show');
+                    }
+
+                    if (sidebar) {
+                        sidebar.classList.remove('expanded');
+                        sidebar.classList.add('hide');
+                    }
+
                     showEmptyChatState();
                 }
             }, 300);
@@ -4250,17 +4299,9 @@ function openChat(userName) {
 
     activeChatUser = userName;
     displayedConversationUser = userName;
-    persistActiveSelection('direct', userName);
-
-    if (chatName) {
-        chatName.innerText = userName;
-    }
-    if (chatStatus) {
-        chatStatus.innerText = 'Tap to chat';
-    }
+    setRecentChatUnreadClear(userName);
 
     const cachedMeta = directUserMetaCache[userName] || {};
-    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
 
     currentChatInfo = {
         type: 'contact',
@@ -4274,22 +4315,12 @@ function openChat(userName) {
         profilePic: cachedMeta.profilePic || ''
     };
 
-    fetchAndCacheUserProfile(userName).then((meta) => {
-        if (!meta || activeChatUser !== userName) {
-            return;
-        }
-
-        currentChatInfo = {
-            ...currentChatInfo,
-            about: meta.about || currentChatInfo.about,
-            profilePic: meta.profilePic || ''
-        };
-        renderChatHeaderAvatar(userName, currentChatInfo.profilePic);
-
-        if (profileModal && profileModal.classList.contains('show')) {
-            loadProfileContent();
-        }
-    });
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Loading chat...';
+    }
 
     if (welcomeScreen && chatInterface) {
         welcomeScreen.style.display = 'none';
@@ -4313,10 +4344,15 @@ function openChat(userName) {
         item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
     });
 
-    markConversationRead(userName).finally(() => {
-        loadRecentChats();
-    });
-    loadConversationMessages(userName, true);
+    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
+
+    markConversationRead(userName)
+        .then(() => {
+            loadConversationMessages(userName, true);
+        })
+        .finally(() => {
+            loadRecentChats();
+        });
     startActiveChatSync();
 }
 
@@ -4353,12 +4389,14 @@ function loadChatMessages(chatName) {
 // Go back to chats
 function goBackToChats() {
     if (!isMobileDevice()) {
+        clearPersistedActiveSelection();
         showRecentChatsPanel();
         return;
     }
 
     sidebar.classList.remove('hide');
     mainChat.classList.remove('show');
+    clearPersistedActiveSelection();
 
     setTimeout(() => {
         showRecentChatsPanel();
@@ -4377,7 +4415,9 @@ function startActiveChatSync() {
     }
 
     activeChatSyncTimer = setInterval(() => {
-        if (activeChatUser && (document.hidden || !isChatSocketReady)) {
+        // Keep a lightweight polling fallback active for cross-device consistency
+        // in case websocket read events are delayed or dropped.
+        if (activeChatUser) {
             loadConversationMessages(activeChatUser, false);
         }
     }, 6000);
@@ -4865,6 +4905,9 @@ function initChatSocket() {
             if (data.type === 'read') {
                 if (activeChatUser === data.sender) {
                     markVisibleSentMessagesAsReadForUser(data.sender);
+                    setTimeout(() => {
+                        loadConversationMessages(data.sender, false);
+                    }, 120);
                 }
                 return;
             }
@@ -4873,6 +4916,28 @@ function initChatSocket() {
                 if (activeChatUser === data.sender) {
                     applyIncomingMessageDelete(data.messageId);
                 } else {
+                    loadRecentChats();
+                }
+                return;
+            }
+
+            if (data.type === 'group-recent') {
+                const roomName = String(data.roomName || '').trim();
+                if (!roomName) {
+                    return;
+                }
+
+                const activeRoom = (typeof groupChatState !== 'undefined' && groupChatState && groupChatState.activeRoomName)
+                    ? String(groupChatState.activeRoomName).trim().toLowerCase()
+                    : '';
+                const isActiveRoom = activeRoom && roomName.toLowerCase() === activeRoom;
+
+                bumpRecentChatToTop(roomName, {
+                    lastMessage: data.message || '',
+                    unreadCount: isActiveRoom ? 0 : undefined,
+                    incrementUnread: !isActiveRoom
+                });
+                if (typeof loadRecentChats === 'function') {
                     loadRecentChats();
                 }
                 return;
@@ -4904,10 +4969,13 @@ function initChatSocket() {
                 markConversationRead(fromUser);
                 bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 0 });
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
+                setTimeout(() => {
+                    loadConversationMessages(fromUser, false);
+                }, 120);
             } else {
                 saveMessageToData(text, false, time, messageData.id);
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
-                bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 1 });
+                bumpRecentChatToTop(fromUser, { lastMessage: text, incrementUnread: true });
             }
         } catch (err) {
             console.error('WebSocket message parse error:', err);
@@ -4996,13 +5064,71 @@ function loadConversationMessages(otherUser, replaceAll = false) {
             }
 
             if (messages.length === 0) {
+                if (replaceAll) {
+                    clearPersistedActiveSelection();
+                }
                 showEmptyChatState();
                 return;
+            }
+
+            if (replaceAll) {
+                if (chatName) {
+                    chatName.innerText = otherUser;
+                }
+                if (chatStatus) {
+                    chatStatus.innerText = 'Tap to chat';
+                }
+                renderChatHeaderAvatar(otherUser, (directUserMetaCache[otherUser] && directUserMetaCache[otherUser].profilePic) || '');
+
+                if (welcomeScreen && chatInterface) {
+                    welcomeScreen.style.display = 'none';
+                    chatInterface.style.display = 'flex';
+                }
+
+                if (mainChat) {
+                    mainChat.classList.remove('collapsed');
+                }
+                if (sidebar) {
+                    sidebar.classList.remove('expanded');
+                }
+
+                if (isMobileDevice()) {
+                    if (sidebar) sidebar.classList.add('hide');
+                    if (mainChat) mainChat.classList.add('show');
+                }
+
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    const nameElement = item.querySelector('.chat-name');
+                    item.classList.toggle('active', !!nameElement && nameElement.textContent === otherUser);
+                });
+
+                persistActiveSelection('direct', otherUser);
+                fetchAndCacheUserProfile(otherUser).then((meta) => {
+                    if (!meta || activeChatUser !== otherUser) {
+                        return;
+                    }
+
+                    currentChatInfo = {
+                        ...currentChatInfo,
+                        about: meta.about || currentChatInfo.about,
+                        profilePic: meta.profilePic || ''
+                    };
+                    renderChatHeaderAvatar(otherUser, currentChatInfo.profilePic);
+
+                    if (profileModal && profileModal.classList.contains('show')) {
+                        loadProfileContent();
+                    }
+                });
             }
 
             messages.forEach(msg => {
                 const messageKey = getConversationMessageKey(msg);
                 if (isConversationMessageRendered(otherUser, messageKey)) {
+                    const isSent = msg.sender === currentUser;
+                    const renderedMessageId = msg.id || msg.messageId || msg.clientMessageId || messageKey;
+                    if (isSent) {
+                        updateMessageStatusById(renderedMessageId, msg.isRead ? 'read' : 'delivered');
+                    }
                     return;
                 }
 
@@ -5219,6 +5345,8 @@ function loadRecentChats() {
                         chat.lastMessage = localPreview.message;
                     }
 
+                    chat.unreadCount = getReconciledRecentChatUnread(chat);
+
                     if (!Boolean(chat.isGroupRoom || chat.isGroupChat)) {
                         const key = (chat.name || chat.username || '').trim();
                         if (key) {
@@ -5269,6 +5397,75 @@ function setRecentChatActivity(chatName, timestamp) {
     recentChatLocalOrder.set(lookupKey, Number(timestamp || Date.now()));
 }
 
+function setRecentChatUnread(chatName, count) {
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!lookupKey) {
+        return;
+    }
+
+    const safeCount = Math.max(0, Number(count || 0));
+    recentChatLocalUnread.set(lookupKey, {
+        count: safeCount,
+        updatedAt: Date.now()
+    });
+
+    if (safeCount > 0) {
+        recentChatUnreadClearAt.delete(lookupKey);
+    }
+}
+
+function setRecentChatUnreadClear(chatName) {
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!lookupKey) {
+        return;
+    }
+
+    recentChatUnreadClearAt.set(lookupKey, Date.now());
+    setRecentChatUnread(chatName, 0);
+}
+
+function getReconciledRecentChatUnread(chat) {
+    const chatName = chat && (chat.name || chat.username) ? String(chat.name || chat.username).trim() : '';
+    const lookupKey = getRecentChatLookupKey(chatName);
+    if (!lookupKey) {
+        return Math.max(0, Number(chat && chat.unreadCount ? chat.unreadCount : 0));
+    }
+
+    const serverUnread = Math.max(0, Number(chat && chat.unreadCount ? chat.unreadCount : 0));
+    const localUnread = recentChatLocalUnread.get(lookupKey);
+    const unreadClearAt = recentChatUnreadClearAt.get(lookupKey);
+    const clearAgeMs = unreadClearAt ? Date.now() - Number(unreadClearAt || 0) : Number.POSITIVE_INFINITY;
+    const isWithinClearWindow = clearAgeMs <= LOCAL_UNREAD_CLEAR_HOLD_MS;
+
+    if (serverUnread === 0) {
+        setRecentChatUnread(chatName, 0);
+        recentChatUnreadClearAt.delete(lookupKey);
+        return 0;
+    }
+
+    if (isWithinClearWindow) {
+        return 0;
+    }
+
+    if (!localUnread) {
+        setRecentChatUnread(chatName, serverUnread);
+        return serverUnread;
+    }
+
+    if (serverUnread >= localUnread.count) {
+        setRecentChatUnread(chatName, serverUnread);
+        return serverUnread;
+    }
+
+    const ageMs = Date.now() - Number(localUnread.updatedAt || 0);
+    if (ageMs <= LOCAL_UNREAD_HOLD_MS) {
+        return localUnread.count;
+    }
+
+    setRecentChatUnread(chatName, serverUnread);
+    return serverUnread;
+}
+
 function getRecentChatActivity(chat) {
     const chatName = chat && (chat.name || chat.username) ? String(chat.name || chat.username).trim() : '';
     const lookupKey = getRecentChatLookupKey(chatName);
@@ -5306,7 +5503,20 @@ function bumpRecentChatToTop(chatName, options = {}) {
         preview.textContent = safePreview.length > 30 ? safePreview.substring(0, 30) + '...' : safePreview;
     }
 
-    const unreadCount = Number(options.unreadCount || 0);
+    const hadUnreadOption = Object.prototype.hasOwnProperty.call(options, 'unreadCount');
+    const shouldIncrementUnread = Boolean(options.incrementUnread);
+    const existingUnreadBadge = chatItem.querySelector('.unread-count');
+    const existingUnreadCount = existingUnreadBadge ? Number(existingUnreadBadge.textContent || 0) : 0;
+
+    let unreadCount = 0;
+    if (hadUnreadOption) {
+        unreadCount = Number(options.unreadCount || 0);
+    } else if (shouldIncrementUnread) {
+        unreadCount = existingUnreadCount + 1;
+    }
+
+    setRecentChatUnread(chatName, unreadCount);
+
     let unreadBadge = chatItem.querySelector('.unread-count');
     if (unreadCount > 0) {
         const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
@@ -5337,7 +5547,7 @@ function startRecentChatsAutoRefresh() {
         if (document.getElementById('chatList')) {
             loadRecentChats();
         }
-    }, 7000);
+    }, 3000);
 }
 
 // Helper function to get logged-in username

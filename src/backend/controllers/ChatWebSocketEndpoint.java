@@ -161,6 +161,18 @@ public class ChatWebSocketEndpoint {
         sendToUser(sender, payload);
     }
 
+    public static void sendGroupRecentEvent(String receiver, String roomName, String sender, String message, String timestamp) {
+        String payload = "{"
+            + "\"type\":\"group-recent\","
+            + "\"receiver\":\"" + escapeJson(receiver == null ? "" : receiver) + "\","
+            + "\"roomName\":\"" + escapeJson(roomName == null ? "" : roomName) + "\","
+            + "\"sender\":\"" + escapeJson(sender == null ? "" : sender) + "\","
+            + "\"message\":\"" + escapeJson(message == null ? "" : message) + "\","
+            + "\"timestamp\":\"" + escapeJson(timestamp == null ? "" : timestamp) + "\""
+            + "}";
+        sendToUser(receiver, payload);
+    }
+
     public static boolean isUserOnline(String username) {
         if (username == null || username.isBlank()) {
             return false;

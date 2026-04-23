@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @WebServlet("/send-group-message")
 public class SendGroupMessageServlet extends HttpServlet {
@@ -52,6 +53,20 @@ public class SendGroupMessageServlet extends HttpServlet {
 
             String savedId = groupRoomService.saveRoomMessage(roomName, sender.trim(), message.trim(), clientMessageId);
             String now = LocalDateTime.now().toString();
+
+            List<String> members = room.getList("members", String.class);
+            if (members != null) {
+                for (String member : members) {
+                    if (member == null || member.isBlank()) {
+                        continue;
+                    }
+                    String cleanMember = member.trim();
+                    if (cleanMember.equals(sender.trim())) {
+                        continue;
+                    }
+                    ChatWebSocketEndpoint.sendGroupRecentEvent(cleanMember, roomName.trim(), sender.trim(), message.trim(), now);
+                }
+            }
 
             StringBuilder json = new StringBuilder();
             json.append("{")

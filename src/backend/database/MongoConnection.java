@@ -4,6 +4,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Filters;
 import org.bson.Document;
 import backend.models.User;
 
@@ -42,6 +43,22 @@ public class MongoConnection {
         MongoCollection<Document> users = getDatabase().getCollection("users");
         Document query = new Document("username", username);
         Document result = users.find(query).first();
+
+        if (result != null) {
+            return new User(
+                    result.getString("firstName"),
+                    result.getString("lastName"),
+                    result.getString("username"),
+                    result.getString("email"),
+                    result.getString("password")
+            );
+        }
+        return null;
+    }
+
+    public User findUserByEmail(String email) {
+        MongoCollection<Document> users = getDatabase().getCollection("users");
+        Document result = users.find(Filters.eq("email", email)).first();
 
         if (result != null) {
             return new User(

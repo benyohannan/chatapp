@@ -1395,7 +1395,8 @@ function startGroupRoomRealtime(roomName) {
             if (typeof bumpRecentChatToTop === 'function') {
                 bumpRecentChatToTop(payload.roomName || roomName, {
                     lastMessage: payload.message || '',
-                    unreadCount: payload.sender && payload.sender.trim() === getGroupUsername() ? 0 : 1
+                    unreadCount: payload.sender && payload.sender.trim() === getGroupUsername() ? 0 : undefined,
+                    incrementUnread: !(payload.sender && payload.sender.trim() === getGroupUsername())
                 });
             }
             if (payload.sender && payload.sender.trim() !== getGroupUsername() && typeof window.notifyIncomingMessage === 'function') {
@@ -1449,7 +1450,7 @@ function scheduleGroupRoomPolling(roomName) {
             loadGroupRoomMessages(roomName, true);
             syncActiveRoomPermissions();
         }
-    }, 3500);
+    }, 1500);
 }
 function loadRequestBadge() {
     const roomName = groupChatState.activeRoomName;
@@ -1526,7 +1527,7 @@ function loadGroupRoomMessages(roomName, silent) {
                         if (typeof bumpRecentChatToTop === 'function') {
                             bumpRecentChatToTop(payload.roomName || cleanRoomName, {
                                 lastMessage: payload.message || '',
-                                unreadCount: 1
+                                incrementUnread: true
                             });
                         }
                         const notificationKey = [

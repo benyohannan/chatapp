@@ -53,6 +53,9 @@ public class GetRecentChatsServlet extends HttpServlet {
 
                 String conversationId = conversationService.extractConversationId(conversation);
                 String lastMessage = conversation.getString("lastMessage") != null ? conversation.getString("lastMessage") : "";
+                if (lastMessage.trim().isEmpty()) {
+                    continue;
+                }
                 String lastMessageTime = conversation.getString("lastMessageTime") != null ? conversation.getString("lastMessageTime") : "";
                 long unreadCount = conversationService.getUnreadCount(conversationId, username);
                 String profilePic = userService.getUserProfilePic(otherParticipant);
