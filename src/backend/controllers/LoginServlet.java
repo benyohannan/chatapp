@@ -15,6 +15,9 @@ import java.io.IOException;
 @WebServlet("/login")
 public class LoginServlet extends HttpServlet {
 
+    private static final int MIN_USERNAME_LENGTH = 3;
+    private static final int MIN_PASSWORD_LENGTH = 6;
+
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         String username = request.getParameter("username");
@@ -27,16 +30,25 @@ public class LoginServlet extends HttpServlet {
             password = password.trim();
         }
 
-        // Validate inputs
         if (username == null || password == null || username.isEmpty() || password.isEmpty()) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Username and password are required.");
+            response.sendRedirect(request.getContextPath() + "/auth.jsp?error=missing_login_fields");
             return;
         }
 
-        // Authenticate user
+        if (username.length() < MIN_USERNAME_LENGTH) {
+            response.sendRedirect(request.getContextPath() + "/auth.jsp?error=invalid_login_username");
+            return;
+        }
+
+        if (password.length() < MIN_PASSWORD_LENGTH) {
+            response.sendRedirect(request.getContextPath() + "/auth.jsp?error=invalid_login_password");
+            return;
+        }
+
         try {
             MongoConnection connection = new MongoConnection();
-            User user = connection.findUserByUsernameOrEmail(username);
+            String identifier = username.trim();
+            User user = connection.findUserByUsernameOrEmail(identifier);
 
             if (user != null && user.getPassword().equals(password)) {
                 HttpSession oldSession = request.getSession(false);
@@ -47,7 +59,7 @@ public class LoginServlet extends HttpServlet {
                 HttpSession session = request.getSession(true);
                 String resolvedUsername = user.getUsername() != null && !user.getUsername().isBlank()
                     ? user.getUsername()
-                    : username;
+                    : identifier;
                 session.setAttribute("username", resolvedUsername);
                 session.setAttribute("userId", resolvedUsername);
 

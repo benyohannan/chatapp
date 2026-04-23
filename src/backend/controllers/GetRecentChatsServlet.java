@@ -15,7 +15,9 @@ import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @WebServlet("/get-recent-chats")
 public class GetRecentChatsServlet extends HttpServlet {
@@ -40,7 +42,7 @@ public class GetRecentChatsServlet extends HttpServlet {
             List<Document> conversations = conversationService.getRecentConversations(username);
             List<Document> groupRooms = groupRoomService.getRoomsForUser(username);
 
-            List<RecentChatEntry> recentEntries = new ArrayList<>();
+            Map<String, RecentChatEntry> recentEntries = new LinkedHashMap<>();
 
             for (Document conversation : conversations) {
                 @SuppressWarnings("unchecked")
@@ -51,18 +53,24 @@ public class GetRecentChatsServlet extends HttpServlet {
                     continue;
                 }
 
-                String conversationId = conversationService.extractConversationId(conversation);
-                String lastMessage = conversation.getString("lastMessage") != null ? conversation.getString("lastMessage") : "";
-                String lastMessageTime = conversation.getString("lastMessageTime") != null ? conversation.getString("lastMessageTime") : "";
-                long unreadCount = conversationService.getUnreadCount(conversationId, username);
-                String profilePic = userService.getUserProfilePic(otherParticipant);
+                String normalizedOtherParticipant = otherParticipant.trim();
+                if (normalizedOtherParticipant.equals(username.trim()) || !userService.userExists(normalizedOtherParticipant)) {
+                    continue;
+                }
 
-                recentEntries.add(RecentChatEntry.userChat(
+                String conversationId = conversationService.extractConversationId(conversation);
+                Document latestMessage = conversationService.getLatestMessage(conversationId);
+                String lastMessage = resolveConversationPreview(conversation, latestMessage);
+                String lastMessageTime = resolveConversationTime(conversation, latestMessage);
+                long unreadCount = conversationService.getUnreadCount(conversationId, username);
+                String profilePic = userService.getUserProfilePic(normalizedOtherParticipant);
+
+                putRecentEntry(recentEntries, "direct:" + normalizedOtherParticipant.toLowerCase(), RecentChatEntry.userChat(
                         conversationId,
-                        otherParticipant,
+                        normalizedOtherParticipant,
                         lastMessage,
                         lastMessageTime,
-                    unreadCount,
+                        unreadCount,
                     profilePic
                 ));
             }
@@ -78,7 +86,7 @@ public class GetRecentChatsServlet extends HttpServlet {
                 String roomId = groupRoomService.extractRoomId(room);
                 long unreadCount = groupRoomService.getUnreadCountForRoom(roomName, username);
 
-                recentEntries.add(RecentChatEntry.groupRoom(
+                putRecentEntry(recentEntries, "group:" + roomName.trim().toLowerCase(), RecentChatEntry.groupRoom(
                         roomId,
                         roomName,
                         lastMessage,
@@ -87,16 +95,18 @@ public class GetRecentChatsServlet extends HttpServlet {
                 ));
             }
 
-            recentEntries.sort(Comparator.comparing(entry -> parseTimestamp(entry.lastMessageTime), Comparator.reverseOrder()));
-            if (recentEntries.size() > 10) {
-                recentEntries = new ArrayList<>(recentEntries.subList(0, 10));
+            List<RecentChatEntry> recentList = new ArrayList<>(recentEntries.values());
+            recentList.removeIf(entry -> !shouldIncludeRecentEntry(entry));
+            recentList.sort(Comparator.comparing(entry -> parseTimestamp(entry.lastMessageTime), Comparator.reverseOrder()));
+            if (recentList.size() > 10) {
+                recentList = new ArrayList<>(recentList.subList(0, 10));
             }
 
             // Format the response as JSON
             StringBuilder jsonResponse = new StringBuilder("[");
             boolean first = true;
 
-            for (RecentChatEntry entry : recentEntries) {
+            for (RecentChatEntry entry : recentList) {
                 if (!first) {
                     jsonResponse.append(",");
                 }
@@ -142,6 +152,95 @@ public class GetRecentChatsServlet extends HttpServlet {
         } catch (Exception e) {
             return LocalDateTime.MIN;
         }
+    }
+
+    private void putRecentEntry(Map<String, RecentChatEntry> entries, String key, RecentChatEntry candidate) {
+        if (key == null || key.trim().isEmpty() || candidate == null) {
+            return;
+        }
+
+        RecentChatEntry existing = entries.get(key);
+        if (existing == null) {
+            entries.put(key, candidate);
+            return;
+        }
+
+        entries.put(key, mergeRecentEntry(existing, candidate));
+    }
+
+    private RecentChatEntry mergeRecentEntry(RecentChatEntry existing, RecentChatEntry candidate) {
+        LocalDateTime existingTime = parseTimestamp(existing.lastMessageTime);
+        LocalDateTime candidateTime = parseTimestamp(candidate.lastMessageTime);
+        RecentChatEntry newer = candidateTime.isAfter(existingTime) ? candidate : existing;
+        RecentChatEntry older = newer == candidate ? existing : candidate;
+
+        String lastMessage = choosePreview(newer.lastMessage, older.lastMessage);
+        String lastMessageTime = !isBlank(newer.lastMessageTime) ? newer.lastMessageTime : older.lastMessageTime;
+        String profilePic = !isBlank(newer.profilePic) ? newer.profilePic : older.profilePic;
+        long unreadCount = Math.max(existing.unreadCount, candidate.unreadCount);
+
+        return new RecentChatEntry(
+            newer.conversationId,
+            newer.username,
+            lastMessage,
+            lastMessageTime,
+            profilePic,
+            unreadCount,
+            newer.isGroupRoom
+        );
+    }
+
+    private String resolveConversationPreview(Document conversation, Document latestMessage) {
+        String summary = conversation != null && conversation.getString("lastMessage") != null ? conversation.getString("lastMessage").trim() : "";
+        String latest = latestMessage != null && latestMessage.getString("message") != null ? latestMessage.getString("message").trim() : "";
+        return choosePreview(summary, latest);
+    }
+
+    private String resolveConversationTime(Document conversation, Document latestMessage) {
+        String summaryTime = conversation != null && conversation.getString("lastMessageTime") != null ? conversation.getString("lastMessageTime").trim() : "";
+        if (!summaryTime.isEmpty()) {
+            return summaryTime;
+        }
+
+        String latestTime = latestMessage != null && latestMessage.getString("timestamp") != null ? latestMessage.getString("timestamp").trim() : "";
+        if (!latestTime.isEmpty()) {
+            return latestTime;
+        }
+
+        return conversation != null && conversation.getString("createdAt") != null ? conversation.getString("createdAt") : "";
+    }
+
+    private String choosePreview(String primary, String fallback) {
+        String cleanPrimary = primary == null ? "" : primary.trim();
+        String cleanFallback = fallback == null ? "" : fallback.trim();
+
+        if (isRealPreview(cleanPrimary)) {
+            return cleanPrimary;
+        }
+        if (isRealPreview(cleanFallback)) {
+            return cleanFallback;
+        }
+        return !cleanPrimary.isEmpty() ? cleanPrimary : cleanFallback;
+    }
+
+    private boolean isRealPreview(String value) {
+        return value != null && !value.isBlank() && !"No messages yet".equalsIgnoreCase(value.trim());
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private boolean shouldIncludeRecentEntry(RecentChatEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+
+        if (entry.unreadCount > 0) {
+            return true;
+        }
+
+        return isRealPreview(entry.lastMessage);
     }
 
     private static class RecentChatEntry {

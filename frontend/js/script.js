@@ -171,6 +171,7 @@ let chatSocket = null;
 let isChatSocketReady = false;
 let activeChatSyncTimer = null;
 let isConversationFetchInFlight = false;
+let conversationFetchRequestSeq = 0;
 let realtimeBadge = null;
 let displayedConversationUser = null;
 let renderedMessageKeysByConversation = {};
@@ -186,7 +187,7 @@ let directUserMetaCache = {};
 let recentChatLocalOrder = new Map();
 let recentChatLocalPreview = new Map();
 let recentChatsRequestSeq = 0;
-const ACTIVE_SELECTION_STORAGE_KEY = 'RainChatify-active-selection';
+const ACTIVE_SELECTION_STORAGE_KEY_PREFIX = 'RainChatify-active-selection';
 const MAX_NOTIFICATION_DEDUPE_KEYS = 600;
 const DEFAULT_EMOJI_SET = [
     '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
@@ -2067,6 +2068,40 @@ function fetchAndCacheUserProfile(username) {
         });
 }
 
+function syncCurrentUserProfileFromServer() {
+    const currentUser = getLoggedInUsername();
+    if (!currentUser) {
+        return Promise.resolve();
+    }
+
+    return fetchAndCacheUserProfile(currentUser).then((meta) => {
+        if (!meta) {
+            return;
+        }
+
+        if (!userSettings.profile) {
+            userSettings.profile = {};
+        }
+
+        if (typeof meta.about === 'string' && meta.about.trim()) {
+            userSettings.profile.about = meta.about.trim();
+        }
+
+        if (typeof meta.profilePic === 'string' && meta.profilePic.trim()) {
+            userSettings.profile.photoDataUrl = meta.profilePic.trim();
+        } else {
+            delete userSettings.profile.photoDataUrl;
+        }
+
+        saveUserSettings();
+        syncSidebarProfileCard();
+
+        if (userSettingsModal && userSettingsModal.classList.contains('show')) {
+            loadSettingsContent();
+        }
+    });
+}
+
 function syncSidebarProfileCard() {
     const sidebarProfileAvatar = document.getElementById('sidebarProfileAvatar');
     const sidebarProfileName = document.getElementById('sidebarProfileName');
@@ -3211,6 +3246,8 @@ function confirmClearChat() {
     }, messages.length * 50 + 500);
 
     hideModal(clearChatModal);
+    loadRecentChats();
+    showRecentChatsPanel();
     showNotification('Chat cleared successfully');
 }
 
@@ -3271,28 +3308,43 @@ function persistActiveSelection(type, name) {
     }
 
     const payload = JSON.stringify({ type: safeType, name: safeName });
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
-        localStorage.setItem(ACTIVE_SELECTION_STORAGE_KEY, payload);
+        sessionStorage.setItem(storageKey, payload);
+        localStorage.setItem(storageKey, payload);
     } catch (error) {
         console.warn('Unable to persist active selection:', error);
     }
 }
 
 function clearPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return;
+    }
+
     try {
-        sessionStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
-        localStorage.removeItem(ACTIVE_SELECTION_STORAGE_KEY);
+        sessionStorage.removeItem(storageKey);
+        localStorage.removeItem(storageKey);
     } catch (error) {
         console.warn('Unable to clear active selection:', error);
     }
 }
 
 function getPersistedActiveSelection() {
+    const storageKey = getActiveSelectionStorageKey();
+    if (!storageKey) {
+        return null;
+    }
+
     let raw = '';
     try {
-        raw = sessionStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
-            || localStorage.getItem(ACTIVE_SELECTION_STORAGE_KEY)
+        raw = sessionStorage.getItem(storageKey)
+            || localStorage.getItem(storageKey)
             || '';
     } catch (error) {
         return null;
@@ -3316,9 +3368,22 @@ function getPersistedActiveSelection() {
     }
 }
 
+function getActiveSelectionStorageKey() {
+    const username = getLoggedInUsername();
+    if (!username) {
+        return null;
+    }
+
+    return ACTIVE_SELECTION_STORAGE_KEY_PREFIX + ':' + username.trim().toLowerCase();
+}
+
 function restorePersistedActiveSelection() {
     const persisted = getPersistedActiveSelection();
     if (!persisted || !persisted.name) {
+        if (chatInterface && welcomeScreen) {
+            chatInterface.style.display = 'none';
+            welcomeScreen.style.display = 'flex';
+        }
         return;
     }
 
@@ -3929,6 +3994,21 @@ function handleDelete() {
 
                 const remainingMessages = chatMessages.querySelectorAll('.message');
                 if (remainingMessages.length === 0) {
+                    if (welcomeScreen && chatInterface) {
+                        welcomeScreen.style.display = 'none';
+                        chatInterface.style.display = 'flex';
+                    }
+
+                    if (mainChat) {
+                        mainChat.classList.remove('collapsed');
+                        mainChat.classList.add('show');
+                    }
+
+                    if (sidebar) {
+                        sidebar.classList.remove('expanded');
+                        sidebar.classList.add('hide');
+                    }
+
                     showEmptyChatState();
                 }
             }, 300);
@@ -4250,17 +4330,8 @@ function openChat(userName) {
 
     activeChatUser = userName;
     displayedConversationUser = userName;
-    persistActiveSelection('direct', userName);
-
-    if (chatName) {
-        chatName.innerText = userName;
-    }
-    if (chatStatus) {
-        chatStatus.innerText = 'Tap to chat';
-    }
 
     const cachedMeta = directUserMetaCache[userName] || {};
-    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
 
     currentChatInfo = {
         type: 'contact',
@@ -4274,22 +4345,12 @@ function openChat(userName) {
         profilePic: cachedMeta.profilePic || ''
     };
 
-    fetchAndCacheUserProfile(userName).then((meta) => {
-        if (!meta || activeChatUser !== userName) {
-            return;
-        }
-
-        currentChatInfo = {
-            ...currentChatInfo,
-            about: meta.about || currentChatInfo.about,
-            profilePic: meta.profilePic || ''
-        };
-        renderChatHeaderAvatar(userName, currentChatInfo.profilePic);
-
-        if (profileModal && profileModal.classList.contains('show')) {
-            loadProfileContent();
-        }
-    });
+    if (chatName) {
+        chatName.innerText = userName;
+    }
+    if (chatStatus) {
+        chatStatus.innerText = 'Loading chat...';
+    }
 
     if (welcomeScreen && chatInterface) {
         welcomeScreen.style.display = 'none';
@@ -4313,10 +4374,15 @@ function openChat(userName) {
         item.classList.toggle('active', !!nameElement && nameElement.textContent === userName);
     });
 
-    markConversationRead(userName).finally(() => {
-        loadRecentChats();
-    });
-    loadConversationMessages(userName, true);
+    renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
+
+    markConversationRead(userName)
+        .then(() => {
+            loadConversationMessages(userName, true);
+        })
+        .finally(() => {
+            loadRecentChats();
+        });
     startActiveChatSync();
 }
 
@@ -4865,6 +4931,9 @@ function initChatSocket() {
             if (data.type === 'read') {
                 if (activeChatUser === data.sender) {
                     markVisibleSentMessagesAsReadForUser(data.sender);
+                    setTimeout(() => {
+                        loadConversationMessages(data.sender, false);
+                    }, 120);
                 }
                 return;
             }
@@ -4904,6 +4973,9 @@ function initChatSocket() {
                 markConversationRead(fromUser);
                 bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 0 });
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
+                setTimeout(() => {
+                    loadConversationMessages(fromUser, false);
+                }, 120);
             } else {
                 saveMessageToData(text, false, time, messageData.id);
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
@@ -4959,7 +5031,8 @@ function loadConversationMessages(otherUser, replaceAll = false) {
         return;
     }
 
-    if (isConversationFetchInFlight) {
+    // Allow explicit chat-open loads to supersede stale in-flight sync requests.
+    if (isConversationFetchInFlight && !replaceAll) {
         return;
     }
 
@@ -4967,6 +5040,7 @@ function loadConversationMessages(otherUser, replaceAll = false) {
     const wasNearBottom = distanceFromBottom <= 48;
 
     isConversationFetchInFlight = true;
+    const requestSeq = ++conversationFetchRequestSeq;
 
     const requestUrl = '/chatapp/conversation-messages?currentUser=' + encodeURIComponent(currentUser)
         + '&otherUser=' + encodeURIComponent(otherUser)
@@ -4979,12 +5053,18 @@ function loadConversationMessages(otherUser, replaceAll = false) {
         }
     })
         .then(response => {
+            if (requestSeq !== conversationFetchRequestSeq) {
+                return { messages: [] };
+            }
             if (!response.ok) {
                 throw new Error('Failed to load messages');
             }
             return response.json();
         })
         .then(data => {
+            if (requestSeq !== conversationFetchRequestSeq) {
+                return;
+            }
             const messages = Array.isArray(data.messages) ? data.messages : [];
 
             if (replaceAll || displayedConversationUser !== otherUser) {
@@ -4996,8 +5076,61 @@ function loadConversationMessages(otherUser, replaceAll = false) {
             }
 
             if (messages.length === 0) {
+                if (replaceAll) {
+                    clearPersistedActiveSelection();
+                }
                 showEmptyChatState();
                 return;
+            }
+
+            if (replaceAll) {
+                if (chatName) {
+                    chatName.innerText = otherUser;
+                }
+                if (chatStatus) {
+                    chatStatus.innerText = 'Tap to chat';
+                }
+                renderChatHeaderAvatar(otherUser, (directUserMetaCache[otherUser] && directUserMetaCache[otherUser].profilePic) || '');
+
+                if (welcomeScreen && chatInterface) {
+                    welcomeScreen.style.display = 'none';
+                    chatInterface.style.display = 'flex';
+                }
+
+                if (mainChat) {
+                    mainChat.classList.remove('collapsed');
+                }
+                if (sidebar) {
+                    sidebar.classList.remove('expanded');
+                }
+
+                if (isMobileDevice()) {
+                    if (sidebar) sidebar.classList.add('hide');
+                    if (mainChat) mainChat.classList.add('show');
+                }
+
+                document.querySelectorAll('.chat-item').forEach(item => {
+                    const nameElement = item.querySelector('.chat-name');
+                    item.classList.toggle('active', !!nameElement && nameElement.textContent === otherUser);
+                });
+
+                persistActiveSelection('direct', otherUser);
+                fetchAndCacheUserProfile(otherUser).then((meta) => {
+                    if (!meta || activeChatUser !== otherUser) {
+                        return;
+                    }
+
+                    currentChatInfo = {
+                        ...currentChatInfo,
+                        about: meta.about || currentChatInfo.about,
+                        profilePic: meta.profilePic || ''
+                    };
+                    renderChatHeaderAvatar(otherUser, currentChatInfo.profilePic);
+
+                    if (profileModal && profileModal.classList.contains('show')) {
+                        loadProfileContent();
+                    }
+                });
             }
 
             messages.forEach(msg => {
@@ -5041,11 +5174,19 @@ function loadConversationMessages(otherUser, replaceAll = false) {
             markRealtimeSync('poll');
         })
         .catch(error => {
+            if (requestSeq !== conversationFetchRequestSeq) {
+                return;
+            }
             console.error('Error loading conversation messages:', error);
             showEmptyChatState();
         })
         .finally(() => {
-            isConversationFetchInFlight = false;
+            if (requestSeq === conversationFetchRequestSeq) {
+                isConversationFetchInFlight = false;
+                if (replaceAll && activeChatUser === otherUser && chatStatus && chatStatus.innerText === 'Loading chat...') {
+                    chatStatus.innerText = 'Tap to chat';
+                }
+            }
         });
 }
 
@@ -5421,6 +5562,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTheme();
     loadUserSettings();
     syncSidebarProfileCard();
+    syncCurrentUserProfileFromServer();
     applyChatFontSize(userSettings.chat.fontSize);
     loadRecentChats(); // Load recent chats dynamically
     startRecentChatsAutoRefresh();

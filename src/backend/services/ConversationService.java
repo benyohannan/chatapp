@@ -177,6 +177,18 @@ public class ConversationService {
         return messageList;
     }
 
+    public Document getLatestMessage(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return null;
+        }
+
+        MongoDatabase db = MongoConnection.getDatabase();
+        MongoCollection<Document> messages = db.getCollection("messages");
+        return messages.find(new Document("conversationId", conversationId))
+            .sort(new Document("timestamp", -1))
+            .first();
+    }
+
     public long getUnreadCount(String conversationId, String username) {
         if (conversationId == null || conversationId.isBlank() || username == null || username.isBlank()) {
             return 0;

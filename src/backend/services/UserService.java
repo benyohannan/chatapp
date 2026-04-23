@@ -68,6 +68,10 @@ public class UserService {
 
         List<Document> recentChats = new ArrayList<>();
         for (Document doc : results) {
+            String lastMessage = doc.getString("lastMessage");
+            if (lastMessage == null || lastMessage.trim().isEmpty()) {
+                continue;
+            }
             recentChats.add(doc);
         }
         return recentChats;
@@ -121,6 +125,16 @@ public class UserService {
                 .first();
 
         return doc != null ? safeString(doc.getString("profilePic")) : "";
+    }
+
+    public boolean userExists(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return false;
+        }
+
+        MongoDatabase db = MongoConnection.getDatabase();
+        MongoCollection<Document> users = db.getCollection("users");
+        return users.countDocuments(Filters.eq("username", username.trim())) > 0;
     }
 
     public String getUserAbout(String username) {
