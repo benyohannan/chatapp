@@ -33,6 +33,10 @@ public class ConversationService {
 
         List<Document> recentConversations = new ArrayList<>();
         for (Document doc : results) {
+            String lastMessage = doc.getString("lastMessage");
+            if (lastMessage == null || lastMessage.trim().isEmpty()) {
+                continue;
+            }
             ensureParticipantBadgeCount(conversations, doc);
             recentConversations.add(doc);
         }
