@@ -3211,6 +3211,8 @@ function confirmClearChat() {
     }, messages.length * 50 + 500);
 
     hideModal(clearChatModal);
+    loadRecentChats();
+    showRecentChatsPanel();
     showNotification('Chat cleared successfully');
 }
 
@@ -3957,7 +3959,22 @@ function handleDelete() {
 
                 const remainingMessages = chatMessages.querySelectorAll('.message');
                 if (remainingMessages.length === 0) {
-                    showRecentChatsPanel();
+                    if (welcomeScreen && chatInterface) {
+                        welcomeScreen.style.display = 'none';
+                        chatInterface.style.display = 'flex';
+                    }
+
+                    if (mainChat) {
+                        mainChat.classList.remove('collapsed');
+                        mainChat.classList.add('show');
+                    }
+
+                    if (sidebar) {
+                        sidebar.classList.remove('expanded');
+                        sidebar.classList.add('hide');
+                    }
+
+                    showEmptyChatState();
                 }
             }, 300);
         })
@@ -4324,10 +4341,13 @@ function openChat(userName) {
 
     renderChatHeaderAvatar(userName, cachedMeta.profilePic || '');
 
-    markConversationRead(userName).finally(() => {
-        loadRecentChats();
-    });
-    loadConversationMessages(userName, true);
+    markConversationRead(userName)
+        .then(() => {
+            loadConversationMessages(userName, true);
+        })
+        .finally(() => {
+            loadRecentChats();
+        });
     startActiveChatSync();
 }
 
@@ -4876,6 +4896,9 @@ function initChatSocket() {
             if (data.type === 'read') {
                 if (activeChatUser === data.sender) {
                     markVisibleSentMessagesAsReadForUser(data.sender);
+                    setTimeout(() => {
+                        loadConversationMessages(data.sender, false);
+                    }, 120);
                 }
                 return;
             }
@@ -4915,6 +4938,9 @@ function initChatSocket() {
                 markConversationRead(fromUser);
                 bumpRecentChatToTop(fromUser, { lastMessage: text, unreadCount: 0 });
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
+                setTimeout(() => {
+                    loadConversationMessages(fromUser, false);
+                }, 120);
             } else {
                 saveMessageToData(text, false, time, messageData.id);
                 notifyIncomingMessage(fromUser, text, 'direct', notificationKey, { userName: fromUser });
